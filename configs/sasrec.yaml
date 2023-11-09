@@ -1,0 +1,6 @@
+hidden_size: 128
+layer_num: 2
+head_num: 2
+dropout_rate: 0.5
+activation: 'gelu'
+layer_norm_eps: 1e-12
