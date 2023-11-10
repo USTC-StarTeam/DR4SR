@@ -66,7 +66,7 @@ class EarlyStopping(object):
         self.logger = logging.getLogger('CDR')
 
         self.best_ckpt = {
-            'args': model.args,
+            'config': model.config,
             'model': self.model_name,
             'epoch': 0,
             'parameters': copy.deepcopy(model.state_dict()),
@@ -120,7 +120,7 @@ class EarlyStopping(object):
     def _reset_counter(self, model: torch.nn.Module, epoch, value):
         self._counter = 0
         self.best_value = value[self.monitor]
-        self.best_ckpt['parameters'] = copy.deepcopy(model._get_ckpt_param())
+        self.best_ckpt['parameters'] = copy.deepcopy(model.state_dict())
         self.best_ckpt['metric'] = value
         self.best_ckpt['epoch'] = epoch
 

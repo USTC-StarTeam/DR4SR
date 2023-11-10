@@ -7,12 +7,11 @@ from utils import *
 
 if __name__ == '__main__':
     parser = get_default_parser()
-    args = vars(parser.parse_args())
+    config = vars(parser.parse_args())
 
-    model_config = yaml.load(os.path.join('configs', args['model']))
-    args.update(model_config)
-    pprint.pprint(args)
+    config = load_config(config)
+    pprint.pprint(config)
 
-    setup_environment(args)
+    setup_environment(config)
 
-    quickstart.run(args)
+    quickstart.run(config)

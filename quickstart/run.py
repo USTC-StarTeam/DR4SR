@@ -2,16 +2,14 @@ import datetime
 
 from utils import *
 
-def run(args: dict):
-    log_path = f"{args['model']}/{args['dataset']}/{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')}.log"
+def run(config: dict):
+    log_path = f"{config['model']}/{config['dataset']}/{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')}.log"
     logger = get_logger(log_path)
 
-    dataset_list = prepare_datasets(args)
+    dataset_list = prepare_datasets(config)
     logger.info(dataset_list[0])
 
-    model = prepare_model(args, dataset_list[0])
+    model = prepare_model(config, dataset_list)
 
-    trainer = prepare_trainer(args, model, dataset_list)
-
-    trainer.fit(*dataset_list[:2], model)
-    trainer.evaluate(dataset_list[-1])
+    model.fit()
+    model.evaluate()

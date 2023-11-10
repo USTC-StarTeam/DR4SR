@@ -1,23 +1,29 @@
 import os
 import torch
+import random
 import logging
 import pandas as pd
 
 from torch.utils.data import Dataset, DataLoader
+from torch.nn.utils.rnn import pad_sequence
 
 class BaseDataset(Dataset):
-    def __init__(self, args, phase='train') -> None:
+    def __init__(self, config, phase='train') -> None:
         super().__init__()
-        self.name = args['dataset']
+        self.name = config['dataset']
         self.logger = logging.getLogger('CDR')
-        self.args = args
+        self.config = config
         self.phase = phase
-        self.device = args['device']
+        self.device = config['device']
 
         self._load_datasets()
+        self._get_user_hist()
 
     def __len__(self):
-        return len(self.data[0]) # self.data[0] is the user_id list
+        if self.phase == 'train':
+            return len(self.data[0]) # self.data[0] is the user_id list
+        else:
+            return len(self.data[self.eval_domain][0])
     
     def __getitem__(self, idx):
         raise NotImplementedError
@@ -54,28 +60,47 @@ class BaseDataset(Dataset):
     def num_items(self):
         return self._num_items
 
+    def _get_user_hist(self):
+        train_inter_data = self._inter_data.sort_values(by=['user_id', 'timestamp'])
+        if self.phase == 'train' or self.phase == 'val':
+            train_inter_data = train_inter_data.groupby(by=['user_id'])['item_id'].apply(list)
+            train_inter_data = train_inter_data.apply(lambda x: x[-self.config['topk']:]).apply(lambda x: x[:-2])
+        else:
+            train_inter_data = train_inter_data.groupby(by=['user_id'])['item_id'].apply(list)
+            train_inter_data = train_inter_data.apply(lambda x: x[-self.config['topk']:]).apply(lambda x: x[:-1])
+        user_id, _user_hist = train_inter_data.index, train_inter_data.tolist()
+
+        user_hist = [torch.tensor([]) for _ in range(self.num_users)]
+        for u_id, u_hist in zip(user_id, _user_hist):
+            user_hist[u_id] = torch.tensor(u_hist)
+        self.user_hist = pad_sequence(user_hist, batch_first=True, padding_value=self.num_items)
+
     def unpack(self, to_be_unpacked):
-        user_id = torch.tensor([_[0] for _ in to_be_unpacked], device=self.device)
-        user_seq = torch.tensor([_[1] for _ in to_be_unpacked], device=self.device)
-        target_item = torch.tensor([_[2] for _ in to_be_unpacked], device=self.device)
-        seq_len = torch.tensor([_[3] for _ in to_be_unpacked], device=self.device)
+        user_id = torch.tensor([_[0] for _ in to_be_unpacked])
+        user_seq = torch.tensor([_[1] for _ in to_be_unpacked])
+        target_item = torch.tensor([_[2] for _ in to_be_unpacked])
+        seq_len = torch.tensor([_[3] for _ in to_be_unpacked])
         return user_id, user_seq, target_item, seq_len
     
-    def _neg_sampling(self, user_hist):
-        weight = torch.ones(size=(len(user_hist), self.num_items), device=self.device)
-        _idx = torch.arange(user_hist.size(0), device=self.device).view(-1, 1).expand_as(user_hist)
-        weight[_idx, user_hist] = 0.0
-        neg_idx = torch.multinomial(weight, self.args['num_neg'], replacement=True)
+    def _neg_sampling(self, user_id):
+        neg_idx = random.randint(0, self.num_items - 1)
         return neg_idx
-
+    
     def _build(self):
+        self.data = None
         raise NotImplementedError
     
     def build(self):
         self._build()
 
     def get_loader(self):
-        return DataLoader(self, self.args['batch_size'], shuffle=True, num_workers=4, pin_memory=True)
+        if self.phase == 'train':
+            return DataLoader(self, self.config['batch_size'], shuffle=True, num_workers=4, pin_memory=True)
+        else:
+            return DataLoader(self, self.config['batch_size'] * 10, shuffle=True, num_workers=4, pin_memory=True)
+
+    def set_eval_domain(self, domain):
+        self.eval_domain = domain
 
 class NormalDataset(BaseDataset):
     """Normal datasets mix all source datasets for training and evaluate them separately.
@@ -97,14 +122,10 @@ class NormalDataset(BaseDataset):
             for _ in self._data:
                 self.data += _
             self.data = self.unpack(self.data)
-            self.user_hist = self.data[1]
         else:
             self.data = {
                 self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
             }
-
-    def set_eval_domain(self, domain):
-        self.eval_domain = domain
 
     def __getitem__(self, idx):
         if self.phase == 'train':
@@ -112,7 +133,7 @@ class NormalDataset(BaseDataset):
             user_seq = self.data[1][idx]
             target_item = self.data[2][idx]
             seq_len = self.data[3][idx]
-            neg_item = self._neg_sampling(user_seq)
+            neg_item = self._neg_sampling(user_id)
             return {
                 'user_id': user_id,
                 'user_seq': user_seq,
@@ -124,10 +145,11 @@ class NormalDataset(BaseDataset):
             user_id = self.data[self.eval_domain][0][idx]
             user_seq = self.data[self.eval_domain][1][idx]
             target_item = self.data[self.eval_domain][2][idx]
-            seq_len = self.data[3][idx]
+            seq_len = self.data[self.eval_domain][3][idx]
             return {
                 'user_id': user_id,
                 'user_seq': user_seq,
                 'target_item': target_item,
                 'seq_len': seq_len,
+                'user_hist': self.user_hist[user_id]
             }

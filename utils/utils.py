@@ -1,3 +1,4 @@
+import yaml
 import random
 import torch
 import numpy as np
@@ -14,29 +15,29 @@ def seed_everything(seed=1111):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-def set_device(args):
-    if isinstance(args['device'], int):
+def set_device(config):
+    if isinstance(config['device'], int):
         # gpu id
-        os.environ['CUDA_VISIBLE_DEVICES'] = args['device']
-        args['device'] = 'cuda'
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(config['device'])
+        config['device'] = 'cuda'
 
-def setup_environment(args):
-    seed_everything(args['seed'])
-    set_device(args['device'])
+def setup_environment(config):
+    seed_everything(config['seed'])
+    set_device(config)
 
-def get_model_class(args):
-    path = '.'.join(['model', args['model'].lower()])
+def get_model_class(config):
+    path = '.'.join(['model', config['model'].lower()])
     module = importlib.import_module(path, __name__)
-    model_class = getattr(module, args['model'])
+    model_class = getattr(module, config['model'])
     return model_class
 
-def prepare_datasets(args):
-    model_class = get_model_class(args)
+def prepare_datasets(config):
+    model_class = get_model_class(config)
     dataset_class = model_class._get_dataset_class()
 
-    train_dataset = dataset_class(args, phase='train')
-    val_dataset = dataset_class(args, phase='val')
-    test_dataset = dataset_class(args, phase='test')
+    train_dataset = dataset_class(config, phase='train')
+    val_dataset = dataset_class(config, phase='val')
+    test_dataset = dataset_class(config, phase='test')
 
     train_dataset.build()
     val_dataset.build()
@@ -44,22 +45,30 @@ def prepare_datasets(args):
 
     return train_dataset, val_dataset, test_dataset
 
-def prepare_model(args, train_dataset):
-    model_class = get_model_class(args)
-    model = model_class(args, train_dataset)
+def prepare_model(config, dataset_list):
+    model_class = get_model_class(config)
+    model = model_class(config, dataset_list)
     return model
 
-def prepare_trainer(args, model, dataset_list):
-    model_class = get_model_class(args)
-    trainer_class = model_class._get_trainer_class()
-
-    trainer = trainer_class(args, model, dataset_list)
-    return trainer
-
 def xavier_normal_initialization(module):
-        if isinstance(module, nn.Embedding):
-            nn.init.xavier_normal_(module.weight.data)
-        elif isinstance(module, nn.Linear):
-            nn.init.xavier_normal_(module.weight.data)
-            if module.bias is not None:
-                nn.init.constant_(module.bias.data, 0)
+    if isinstance(module, nn.Embedding):
+        nn.init.xavier_normal_(module.weight.data)
+    elif isinstance(module, nn.Linear):
+        nn.init.xavier_normal_(module.weight.data)
+        if module.bias is not None:
+            nn.init.constant_(module.bias.data, 0)
+
+def load_config(config : dict):
+    # dataset config
+    path = os.path.join('configs', config['dataset'].lower() + '.yaml')
+    with open(path, "r") as stream:
+        config.update(yaml.safe_load(stream))
+    # basemodel config
+    path = os.path.join('configs', 'basemodel.yaml')
+    with open(path, "r") as stream:
+        config.update(yaml.safe_load(stream))
+    # model config
+    path = os.path.join('configs', config['model'].lower() + '.yaml')
+    with open(path, "r") as stream:
+        config.update(yaml.safe_load(stream))
+    return config

@@ -1,30 +1,34 @@
 import torch
 import torch.nn as nn
-from models.basemodel import BaseModel
-from models.layers import SeqPoolingLayer
+from model.basemodel import BaseModel
+from model.layers import SeqPoolingLayer
+from data import dataset
 
 class SASRec(BaseModel):
-    def __init__(self, args, train_dataset) -> None:
-        super().__init__(args, train_dataset)
-        self.item_embedding = nn.Embedding(self.num_items, self.embed_dim)
+    def __init__(self, config, train_dataset) -> None:
+        super().__init__(config, train_dataset)
         self.position_emb = torch.nn.Embedding(self.max_seq_len, self.embed_dim)
         transformer_encoder = torch.nn.TransformerEncoderLayer(
             d_model=self.embed_dim,
-            nhead=args['n_head'],
-            dim_feedforward=args['hidden_size'],
-            dropout=args['dropout'],
-            activation=args['activation'],
-            layer_norm_eps=args['layer_norm_eps'],
+            nhead=config['head_num'],
+            dim_feedforward=config['hidden_size'],
+            dropout=config['dropout_rate'],
+            activation=config['activation'],
+            layer_norm_eps=config['layer_norm_eps'],
             batch_first=True,
             norm_first=False
         )
         self.transformer_layer = torch.nn.TransformerEncoder(
             encoder_layer=transformer_encoder,
-            num_layers=args['n_layer'],
+            num_layers=config['layer_num'],
         )
-        self.dropout = torch.nn.Dropout(p=args['dropout'])
+        self.dropout = torch.nn.Dropout(p=config['dropout_rate'])
         self.training_pooling_layer = SeqPoolingLayer(pooling_type='last')
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
+
+    
+    def _get_dataset_class():
+        return dataset.NormalDataset
 
     def forward(self, batch):
         user_seq, seq_len = batch['user_seq'], batch['seq_len']
