@@ -18,6 +18,8 @@ class BaseDataset(Dataset):
 
         self._load_datasets()
         self._get_user_hist()
+        self.domain_user_mapping = self.get_domain_user_mapping()
+        self.domain_item_mapping = self.get_domain_item_mapping()
 
     def __len__(self):
         if self.phase == 'train':
@@ -40,6 +42,20 @@ class BaseDataset(Dataset):
             ]
         else:
             raise NotImplementedError
+
+    def get_domain_user_mapping(self):
+        rst = {}
+        for idx, domain in enumerate(self.domain_name_list):
+            sub_df = self._inter_data[self._inter_data['domain'] == idx]
+            rst[domain] = sub_df['user_id'].unique().tolist()
+        return rst
+    
+    def get_domain_item_mapping(self):
+        rst = {}
+        for idx, domain in enumerate(self.domain_name_list):
+            sub_df = self._inter_data[self._inter_data['domain'] == idx]
+            rst[domain] = sub_df['item_id'].unique().tolist()
+        return rst
 
     def _load_datasets(self):
         path_prefix = 'dataset'
