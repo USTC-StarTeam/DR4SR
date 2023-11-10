@@ -76,8 +76,9 @@ class EarlyStopping(object):
         if filename != None:
             self._best_ckpt_path = filename
         else:
-            import time
-            _file_name = time.strftime(f"{self.model_name}/{dataset_name}/%Y-%m-%d-%H-%M-%S.log", time.localtime())
+            for handler in self.logger.handlers:
+                if type(handler) == logging.FileHandler:
+                    _file_name = os.path.basename(handler.baseFilename).split('.')[0]
             self._best_ckpt_path = f"{self.model_name}/{dataset_name}/{_file_name}.ckpt"
         self.__check_save_dir()
 

@@ -20,4 +20,3 @@ val_metrics: [ndcg, recall]
 test_metrics: [ndcg, recall]
 topk: 100 # Max len of user hist to reduce complexity
 save_path: './saved/'
-ckpt_path: './saved/'
