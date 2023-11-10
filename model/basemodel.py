@@ -304,7 +304,7 @@ class BaseModel(nn.Module):
             test_data.set_eval_domain(domain)
             test_loader = test_data.get_loader()
             output_list = self.test_epoch(test_loader)
-            output.update(self.test_epoch_end(output_list), domain)
+            output.update(self.test_epoch_end(output_list, domain))
         for k, v in output.items():
             for domain_name in self.domain_name_list:
                 if domain_name in k: # result of a single domain
