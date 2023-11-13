@@ -15,6 +15,7 @@ embed_dim: 64
 loss_fn: 'bce'
 
 # Eval
+eval_batch_size: 1000000
 cutoff: [20, 10, 5]
 val_metrics: [ndcg, recall]
 test_metrics: [ndcg, recall]
