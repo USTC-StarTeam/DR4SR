@@ -106,7 +106,6 @@ class BaseDataset(Dataset):
     
     def _neg_sampling(self, user_id):
         user_hist = self.user_hist[user_id]
-        # neg_idx = torch.randint(0, self.num_items, (self.config['max_seq_len'], self.config['num_neg']))
 
         weight = torch.ones(self.num_items + 1)
         weight[user_hist] = 0.0
