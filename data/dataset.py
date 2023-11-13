@@ -124,15 +124,15 @@ class BaseDataset(Dataset):
 
     def get_loader(self):
         if self.phase == 'train':
-            return DataLoader(self, self.config['batch_size'])
+            return DataLoader(self, self.config['batch_size'], shuffle=True, pin_memory=True)
         else:
-            return DataLoader(self, self.config['eval_batch_size'])
+            return DataLoader(self, self.config['eval_batch_size'], pin_memory=True)
 
     def set_eval_domain(self, domain):
         self.eval_domain = domain
 
-class NormalDataset(BaseDataset):
-    """Normal datasets mix all source datasets for training and evaluate them separately.
+class SeqDataset(BaseDataset):
+    """Mix all source datasets for training and evaluate them separately.
     """
 
     def _load_datasets(self):

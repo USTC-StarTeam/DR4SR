@@ -147,9 +147,7 @@ class BaseModel(nn.Module):
                 desc=f"Training {nepoch:>5}",
                 leave=True,
             )
-            all_seq = []
             for batch_idx, batch in enumerate(loader):
-                all_seq.append(batch['user_seq'])
                 batch = {k: v.to(self.device) for k, v in batch.items()}
                 self.optimizer.zero_grad()
                 training_step_args = {'batch': batch}
@@ -157,7 +155,6 @@ class BaseModel(nn.Module):
                 loss.backward()
                 self.optimizer.step()
                 outputs.append({f"loss_{loader_idx}": loss.detach()})
-            torch.save(all_seq, './all_seq.pth')
             output_list.append(outputs)
         return output_list
     
@@ -276,8 +273,7 @@ class BaseModel(nn.Module):
         assert len(rank_m) > 0
         score, topk_items = self.topk(batch, topk, batch['user_hist'])
         label = batch['target_item'].view(-1, 1) == topk_items
-        # pos_rating = batch[self.frating].view(-1, 1)
-        pos_rating = torch.ones_like(label, device=self.device)
+        pos_rating = batch['label'].view(-1, 1)
         return {f"{name}@{cutoff}": func(label, pos_rating, cutoff) for cutoff in cutoffs for name, func in rank_m}, bs
     
     def topk(self, batch, k, user_h=None):

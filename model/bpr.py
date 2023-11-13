@@ -10,7 +10,7 @@ class BPR(BaseModel):
         self.user_embedding = nn.Embedding(self.num_users, self.embed_dim)
 
     def _get_dataset_class():
-        return dataset.NormalDataset
+        return dataset.SeqDataset
 
     def forward(self, batch):
         if self.training:
