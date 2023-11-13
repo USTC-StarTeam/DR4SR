@@ -43,7 +43,7 @@ class BaseDataset(Dataset):
         elif self.name == 'debug':
             return [
                 'sport',
-                # 'toy'
+                'toy'
             ]
         else:
             raise NotImplementedError

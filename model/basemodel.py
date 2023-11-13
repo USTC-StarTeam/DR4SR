@@ -145,7 +145,7 @@ class BaseModel(nn.Module):
                 total=len(loader),
                 ncols=75,
                 desc=f"Training {nepoch:>5}",
-                leave=True,
+                leave=False,
             )
             for batch_idx, batch in enumerate(loader):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
