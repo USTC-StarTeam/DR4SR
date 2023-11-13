@@ -40,6 +40,11 @@ class BaseDataset(Dataset):
                 'sport',
                 'toy'
             ]
+        elif self.name == 'debug':
+            return [
+                'sport',
+                # 'toy'
+            ]
         else:
             raise NotImplementedError
 
@@ -96,10 +101,18 @@ class BaseDataset(Dataset):
         user_seq = torch.tensor([_[1] for _ in to_be_unpacked])
         target_item = torch.tensor([_[2] for _ in to_be_unpacked])
         seq_len = torch.tensor([_[3] for _ in to_be_unpacked])
-        return user_id, user_seq, target_item, seq_len
+        label = torch.tensor([_[4] for _ in to_be_unpacked])
+        return user_id, user_seq, target_item, seq_len, label
     
     def _neg_sampling(self, user_id):
-        neg_idx = random.randint(0, self.num_items - 1)
+        user_hist = self.user_hist[user_id]
+        # neg_idx = torch.randint(0, self.num_items, (self.config['max_seq_len'], self.config['num_neg']))
+
+        weight = torch.ones(self.num_items + 1)
+        weight[user_hist] = 0.0
+        weight[-1] = 0 # padding
+        neg_idx = torch.multinomial(weight, self.config['num_neg'] * self.config['max_seq_len'], replacement=True)
+        neg_idx = neg_idx.reshape(self.config['max_seq_len'], self.config['num_neg'])
         return neg_idx
     
     def _build(self):
@@ -111,9 +124,9 @@ class BaseDataset(Dataset):
 
     def get_loader(self):
         if self.phase == 'train':
-            return DataLoader(self, self.config['batch_size'], shuffle=True, num_workers=4, pin_memory=True)
+            return DataLoader(self, self.config['batch_size'])
         else:
-            return DataLoader(self, self.config['batch_size'] * 10, shuffle=True, num_workers=4, pin_memory=True)
+            return DataLoader(self, self.config['eval_batch_size'])
 
     def set_eval_domain(self, domain):
         self.eval_domain = domain
@@ -145,27 +158,17 @@ class NormalDataset(BaseDataset):
 
     def __getitem__(self, idx):
         if self.phase == 'train':
-            user_id = self.data[0][idx]
-            user_seq = self.data[1][idx]
-            target_item = self.data[2][idx]
-            seq_len = self.data[3][idx]
-            neg_item = self._neg_sampling(user_id)
-            return {
-                'user_id': user_id,
-                'user_seq': user_seq,
-                'target_item': target_item,
-                'seq_len': seq_len,
-                'neg_item': neg_item,
-            }
+            data = self.data
         else:
-            user_id = self.data[self.eval_domain][0][idx]
-            user_seq = self.data[self.eval_domain][1][idx]
-            target_item = self.data[self.eval_domain][2][idx]
-            seq_len = self.data[self.eval_domain][3][idx]
-            return {
-                'user_id': user_id,
-                'user_seq': user_seq,
-                'target_item': target_item,
-                'seq_len': seq_len,
-                'user_hist': self.user_hist[user_id]
-            }
+            data = self.data[self.eval_domain]
+        batch = {}
+        batch['user_id'] = data[0][idx]
+        batch['user_seq'] = data[1][idx]
+        batch['target_item'] = data[2][idx]
+        batch['seq_len'] = data[3][idx]
+        batch['label'] = data[4][idx]
+        if self.phase == 'train':
+            batch['neg_item'] = self._neg_sampling(batch['user_id'])
+        else:
+            batch['user_hist'] = self.user_hist[batch['user_id']]
+        return batch

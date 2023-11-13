@@ -23,10 +23,9 @@ class SASRec(BaseModel):
             num_layers=config['layer_num'],
         )
         self.dropout = torch.nn.Dropout(p=config['dropout_rate'])
-        self.training_pooling_layer = SeqPoolingLayer(pooling_type='last')
+        self.training_pooling_layer = SeqPoolingLayer(pooling_type='origin')
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
 
-    
     def _get_dataset_class():
         return dataset.NormalDataset
 

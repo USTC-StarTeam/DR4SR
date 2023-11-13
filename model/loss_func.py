@@ -25,8 +25,19 @@ class BinaryCrossEntropyLoss(nn.Module):
             neg_loss = neg_loss.sum() / (~padding_mask).sum()
         else:
             neg_loss = torch.mean(neg_loss)
-
+        # return -pos_loss
         return -pos_loss + neg_loss
 
     def _cal_weight(self, neg_score):
         return torch.ones_like(neg_score) / neg_score.size(-1)
+    
+class BPRLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pos_score, neg_score):
+        padding_mask = torch.isinf(pos_score)
+        loss = F.logsigmoid(pos_score.view(*pos_score.shape, 1) - neg_score)
+        loss.masked_fill_(padding_mask.unsqueeze(-1), 0.0)
+        weight = F.softmax(torch.ones_like(neg_score), -1)
+        return -(loss * weight).sum(-1).sum() / (~padding_mask).sum()

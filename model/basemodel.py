@@ -2,7 +2,7 @@ import os
 import torch
 import logging
 import time
-import eval
+import evaluation
 
 from tqdm import tqdm
 from torch import optim
@@ -12,7 +12,7 @@ from model.loss_func import *
 from data.dataset import BaseDataset
 from typing import Dict, List, Optional, Tuple
 
-from utils.utils import xavier_normal_initialization
+from utils.utils import xavier_normal_initialization, normal_initialization
 
 
 class BaseModel(nn.Module):
@@ -26,6 +26,8 @@ class BaseModel(nn.Module):
         self.dataset_list = dataset_list
         self.device = config['device']
         self.domain_name_list = dataset_list[0].domain_name_list
+        self.domain_user_mapping = dataset_list[0].domain_user_mapping
+        self.domain_item_mapping = dataset_list[0].domain_item_mapping
 
         # register mode-relevant parameters
         self.embed_dim = config['embed_dim']
@@ -33,12 +35,13 @@ class BaseModel(nn.Module):
         self.num_users = dataset_list[0].num_users
         self.num_items = dataset_list[0].num_items
         self.item_embedding = nn.Embedding(self.num_items + 1, self.embed_dim)
-        self.optimizer = self._get_optimizers()
-        self.loss_fn = self._get_loss_func()
 
     def init_model(self):
+        self.apply(normal_initialization)
+        self.item_embedding.weight[-1].data.copy_(torch.zeros(self.embed_dim))
         self = self.to(self.device)
-        self.apply(xavier_normal_initialization)
+        self.optimizer = self._get_optimizers()
+        self.loss_fn = self._get_loss_func()
 
     def _get_optimizers(self):
         opt_name = self.config['optimizer']
@@ -64,12 +67,14 @@ class BaseModel(nn.Module):
     def _get_loss_func(self):
         if self.config['loss_fn'] == 'bce':
             return BinaryCrossEntropyLoss()
+        elif self.config['loss_fn'] == 'bpr':
+            return BPRLoss()
 
     def forward(self):
         raise NotImplementedError
 
     def fit(self):
-        self.callback = callbacks.EarlyStopping(self, 'ndcg@20', self.config['dataset'])
+        self.callback = callbacks.EarlyStopping(self, 'ndcg@20', self.config['dataset'], patience=self.config['early_stop_patience'])
         self.logger.info('save_dir:' + self.callback.save_dir)
         self.init_model()
         self.logger.info(self)
@@ -95,6 +100,7 @@ class BaseModel(nn.Module):
                     for domain in self.domain_name_list:
                         val_dataset = self.dataset_list[1]
                         val_dataset.set_eval_domain(domain)
+                        self.set_eval_domain(domain)
                         validation_output_list = self.validation_epoch(nepoch, val_dataset.get_loader())
                         self.validation_epoch_end(validation_output_list, domain)
                     all_domain_result = defaultdict(float)
@@ -141,21 +147,26 @@ class BaseModel(nn.Module):
                 desc=f"Training {nepoch:>5}",
                 leave=True,
             )
+            all_seq = []
             for batch_idx, batch in enumerate(loader):
+                all_seq.append(batch['user_seq'])
                 batch = {k: v.to(self.device) for k, v in batch.items()}
                 self.optimizer.zero_grad()
                 training_step_args = {'batch': batch}
                 loss = self.training_step(**training_step_args)
                 loss.backward()
-                outputs.append({f"loss_{loader_idx}": loss.detach()})
                 self.optimizer.step()
+                outputs.append({f"loss_{loader_idx}": loss.detach()})
+            torch.save(all_seq, './all_seq.pth')
             output_list.append(outputs)
         return output_list
     
     def training_step(self, batch):
         query = self.forward(batch)
         pos_score = (query * self.item_embedding(batch['target_item'])).sum(-1)
-        neg_score = (query * self.item_embedding(batch['neg_item'])).sum(-1)
+        neg_score = (query.unsqueeze(-2) * self.item_embedding(batch['neg_item'])).sum(-1)
+        pos_score[batch['target_item'] == self.num_items] = -torch.inf # padding
+
         loss_value = self.loss_fn(pos_score, neg_score)
         return loss_value
     
@@ -207,7 +218,7 @@ class BaseModel(nn.Module):
     def validation_epoch_end(self, outputs, domain):
         val_metrics = self.config['val_metrics']
         cutoff = self.config['cutoff']
-        val_metric = eval.get_eval_metrics(val_metrics, cutoff, validation=True)
+        val_metric = evaluation.get_eval_metrics(val_metrics, cutoff, validation=True)
         if isinstance(outputs[0][0], List):
             out = self._test_epoch_end(outputs, val_metric)
             out = dict(zip(val_metric, out))
@@ -220,7 +231,7 @@ class BaseModel(nn.Module):
     def test_epoch_end(self, outputs, domain):
         test_metrics = self.config['test_metrics']
         cutoff = self.config['cutoff']
-        test_metric = eval.get_eval_metrics(test_metrics, cutoff, validation=False)
+        test_metric = evaluation.get_eval_metrics(test_metrics, cutoff, validation=False)
         if isinstance(outputs[0][0], List):
             out = self._test_epoch_end(outputs, test_metric)
             out = dict(zip(test_metric, out))
@@ -259,7 +270,7 @@ class BaseModel(nn.Module):
         return self._test_step(batch, eval_metric, cutoffs)
     
     def _test_step(self, batch, metric, cutoffs):
-        rank_m = eval.get_rank_metrics(metric)
+        rank_m = evaluation.get_rank_metrics(metric)
         topk = self.config['topk']
         bs = batch['user_id'].size(0)
         assert len(rank_m) > 0
@@ -272,18 +283,19 @@ class BaseModel(nn.Module):
     def topk(self, batch, k, user_h=None):
         query = self.forward(batch)
         more = user_h.size(1) if user_h is not None else 0
-        score, topk_items = torch.topk(query @ self.item_embedding.weight.T, k + more)
-        topk_items = topk_items + 1
-        if user_h is not None:
-            existing, _ = user_h.sort()
-            idx_ = torch.searchsorted(existing, topk_items)
-            idx_[idx_ == existing.size(1)] = existing.size(1) - 1
-            score[torch.gather(existing, 1, idx_) == topk_items] = -float('inf')
-            score, idx = score.topk(k)
-            topk_items = torch.gather(topk_items, 1, idx)
+        real_score = query @ self.item_embedding.weight.T
+        domain_mask = torch.ones(1, self.num_items + 1, dtype=torch.bool, device=self.device)
+        domain_mask[:, self.domain_item_mapping[self.eval_domain]] = 0
+        masked_score : torch.Tensor = real_score.masked_fill(domain_mask, -torch.inf)
+        masked_score = torch.scatter(masked_score, 1, user_h, -torch.inf)
+
+        score, topk_items = torch.topk(masked_score, k)
 
         return score, topk_items
-    
+
+    def set_eval_domain(self, domain):
+        self.eval_domain = domain
+
     def evaluate(self) -> Dict:
         r""" Predict for test data.
         
@@ -302,13 +314,16 @@ class BaseModel(nn.Module):
 
         for domain in self.domain_name_list:
             test_data.set_eval_domain(domain)
+            self.set_eval_domain(domain)
             test_loader = test_data.get_loader()
             output_list = self.test_epoch(test_loader)
             output.update(self.test_epoch_end(output_list, domain))
+        all_domain_result = defaultdict(float)
         for k, v in output.items():
             for domain_name in self.domain_name_list:
                 if domain_name in k: # result of a single domain
-                    output[k.removeprefix(domain_name + '_')] += v
+                    all_domain_result[k.removeprefix(domain_name + '_')] += v
+        output.update(all_domain_result)
 
         self.logger.info(output)
         return output
