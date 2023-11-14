@@ -23,7 +23,6 @@ class BaseDataset(Dataset):
         self.user_hist = None
 
         self._load_datasets()
-        self._get_user_hist()
         self.domain_user_mapping = self.get_domain_user_mapping()
         self.domain_item_mapping = self.get_domain_item_mapping()
 
@@ -68,21 +67,10 @@ class BaseDataset(Dataset):
     @property
     def num_items(self):
         return self._num_items
-
-    def _get_user_hist(self):
-        train_inter_data = self._inter_data.sort_values(by=['user_id', 'timestamp'])
-        if self.phase == 'train' or self.phase == 'val':
-            train_inter_data = train_inter_data.groupby(by=['user_id'])['item_id'].apply(list)
-            train_inter_data = train_inter_data.apply(lambda x: x[-self.config['topk']:]).apply(lambda x: x[:-2])
-        else:
-            train_inter_data = train_inter_data.groupby(by=['user_id'])['item_id'].apply(list)
-            train_inter_data = train_inter_data.apply(lambda x: x[-self.config['topk']:]).apply(lambda x: x[:-1])
-        user_id, _user_hist = train_inter_data.index, train_inter_data.tolist()
-
-        user_hist = [torch.tensor([]) for _ in range(self.num_users)]
-        for u_id, u_hist in zip(user_id, _user_hist):
-            user_hist[u_id] = torch.tensor(u_hist)
-        self.user_hist = pad_sequence(user_hist, batch_first=True, padding_value=self.num_items)
+    
+    @property
+    def num_domains(self):
+        return len(self.domain_name_list)
 
     def unpack(self, to_be_unpacked):
         user_id = torch.tensor([_[0] for _ in to_be_unpacked])
@@ -92,9 +80,7 @@ class BaseDataset(Dataset):
         label = torch.tensor([_[4] for _ in to_be_unpacked])
         return user_id, user_seq, target_item, seq_len, label
     
-    def _neg_sampling(self, user_id):
-        user_hist = self.user_hist[user_id]
-
+    def _neg_sampling(self, user_hist):
         weight = torch.ones(self.num_items + 1)
         weight[user_hist] = 0.0
         weight[-1] = 0 # padding
@@ -155,7 +141,7 @@ class SeqDataset(BaseDataset):
         batch['seq_len'] = data[3][idx]
         batch['label'] = data[4][idx]
         if self.phase == 'train':
-            batch['neg_item'] = self._neg_sampling(batch['user_id'])
+            batch['neg_item'] = self._neg_sampling(batch['user_seq'])
         else:
-            batch['user_hist'] = self.user_hist[batch['user_id']]
+            batch['user_hist'] = batch['user_seq']
         return batch
