@@ -1,3 +1,4 @@
+domain_name_list: ['book', 'cloth', 'movie', 'sport', 'toy']
 user_threshold: 5
 item_threshold: 5
 max_seq_len: 20

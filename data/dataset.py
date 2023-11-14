@@ -15,6 +15,12 @@ class BaseDataset(Dataset):
         self.config = config
         self.phase = phase
         self.device = config['device']
+        self.domain_name_list = self.config['domain_name_list']
+
+        # register attribute
+        self._data = None
+        self.data = None
+        self.user_hist = None
 
         self._load_datasets()
         self._get_user_hist()
@@ -29,24 +35,6 @@ class BaseDataset(Dataset):
     
     def __getitem__(self, idx):
         raise NotImplementedError
-
-    @property
-    def domain_name_list(self):
-        if self.name == 'amazon':
-            return [
-                'book',
-                'cloth',
-                'movie',
-                'sport',
-                'toy'
-            ]
-        elif self.name == 'debug':
-            return [
-                'sport',
-                'toy'
-            ]
-        else:
-            raise NotImplementedError
 
     def get_domain_user_mapping(self):
         rst = {}
