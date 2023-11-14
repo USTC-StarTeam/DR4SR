@@ -78,7 +78,8 @@ class BaseDataset(Dataset):
         target_item = torch.tensor([_[2] for _ in to_be_unpacked])
         seq_len = torch.tensor([_[3] for _ in to_be_unpacked])
         label = torch.tensor([_[4] for _ in to_be_unpacked])
-        return user_id, user_seq, target_item, seq_len, label
+        domain_id = torch.tensor([_[5] for _ in to_be_unpacked])
+        return user_id, user_seq, target_item, seq_len, label, domain_id
     
     def _neg_sampling(self, user_hist):
         weight = torch.ones(self.num_items + 1)
@@ -140,6 +141,7 @@ class SeqDataset(BaseDataset):
         batch['target_item'] = data[2][idx]
         batch['seq_len'] = data[3][idx]
         batch['label'] = data[4][idx]
+        batch['domain_id'] = data[5][idx]
         if self.phase == 'train':
             batch['neg_item'] = self._neg_sampling(batch['user_seq'])
         else:
