@@ -27,7 +27,7 @@ class SASRec(BaseModel):
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
 
     def _get_dataset_class():
-        return dataset.SeqDataset
+        return dataset.SeparateDataset
 
     def forward(self, batch):
         user_seq, seq_len = batch['user_seq'], batch['seq_len']

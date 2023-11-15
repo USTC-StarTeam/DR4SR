@@ -105,7 +105,7 @@ class BaseDataset(Dataset):
     def set_eval_domain(self, domain):
         self.eval_domain = domain
 
-class SeqDataset(BaseDataset):
+class SeparateDataset(BaseDataset):
     """Mix all source datasets for training and evaluate them separately.
     """
 
