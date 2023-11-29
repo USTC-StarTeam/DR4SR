@@ -5,9 +5,9 @@ from model.layers import SeqPoolingLayer
 from data import dataset
 
 class SASRec(BaseModel):
-    def __init__(self, config, train_dataset) -> None:
-        super().__init__(config, train_dataset)
-        self.position_emb = torch.nn.Embedding(self.max_seq_len, self.embed_dim)
+    def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
+        super().__init__(config, dataset_list)
+        self.position_emb = torch.nn.Embedding(self.max_seq_len * dataset_list[0].num_domains, self.embed_dim)
         transformer_encoder = torch.nn.TransformerEncoderLayer(
             d_model=self.embed_dim,
             nhead=config['head_num'],
@@ -28,15 +28,16 @@ class SASRec(BaseModel):
 
     def _get_dataset_class():
         return dataset.SeparateDataset
+        return dataset.MixDataset
 
     def forward(self, batch):
         user_seq, seq_len = batch['user_seq'], batch['seq_len']
         positions = torch.arange(user_seq.size(1), dtype=torch.long, device=self.device)
         positions = positions.unsqueeze(0).expand_as(user_seq)
         position_embs = self.position_emb(positions)
-        seq_embs = self.item_embedding(user_seq)
+        seq_embs = self.item_embedding.weight[user_seq]
 
-        mask4padding = user_seq == self.num_items  # BxL
+        mask4padding = user_seq == -1  # BxL
         L = user_seq.size(-1)
         attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_seq.device), 1)
         transformer_out = self.transformer_layer(

@@ -160,9 +160,9 @@ class BaseModel(nn.Module):
     
     def training_step(self, batch):
         query = self.forward(batch)
-        pos_score = (query * self.item_embedding(batch['target_item'])).sum(-1)
-        neg_score = (query.unsqueeze(-2) * self.item_embedding(batch['neg_item'])).sum(-1)
-        pos_score[batch['target_item'] == self.num_items] = -torch.inf # padding
+        pos_score = (query * self.item_embedding.weight[batch['target_item']]).sum(-1)
+        neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
+        pos_score[batch['target_item'] == -1] = -torch.inf # padding
 
         loss_value = self.loss_fn(pos_score, neg_score)
         return loss_value
@@ -283,6 +283,7 @@ class BaseModel(nn.Module):
         domain_mask = torch.ones(1, self.num_items + 1, dtype=torch.bool, device=self.device)
         domain_mask[:, self.domain_item_mapping[self.eval_domain]] = 0
         masked_score : torch.Tensor = real_score.masked_fill(domain_mask, -torch.inf)
+        user_h[user_h == -1] = self.num_items # index -1 is invalid for torch.scatter, so we just change it with the PAD id
         masked_score = torch.scatter(masked_score, 1, user_h, -torch.inf)
 
         score, topk_items = torch.topk(masked_score, k)

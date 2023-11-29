@@ -1,7 +1,7 @@
 # Training
 batch_size: 512
 early_stop_mode: max
-early_stop_patience: 10
+early_stop_patience: 40
 epochs: 1000
 device: 1
 optimizer: adam

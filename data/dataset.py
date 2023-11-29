@@ -81,12 +81,12 @@ class BaseDataset(Dataset):
         domain_id = torch.tensor([_[5] for _ in to_be_unpacked])
         return user_id, user_seq, target_item, seq_len, label, domain_id
     
-    def _neg_sampling(self, user_hist):
+    def _neg_sampling(self, user_hist, seq_len):
         weight = torch.ones(self.num_items + 1)
         weight[user_hist] = 0.0
         weight[-1] = 0 # padding
-        neg_idx = torch.multinomial(weight, self.config['num_neg'] * self.config['max_seq_len'], replacement=True)
-        neg_idx = neg_idx.reshape(self.config['max_seq_len'], self.config['num_neg'])
+        neg_idx = torch.multinomial(weight, self.config['num_neg'] * seq_len, replacement=True)
+        neg_idx = neg_idx.reshape(seq_len, self.config['num_neg'])
         return neg_idx
     
     def _build(self):
@@ -106,7 +106,7 @@ class BaseDataset(Dataset):
         self.eval_domain = domain
 
 class SeparateDataset(BaseDataset):
-    """Mix all source datasets for training and evaluate them separately.
+    """Simply put sequences in each domain togather.
     """
 
     def _load_datasets(self):
@@ -143,7 +143,52 @@ class SeparateDataset(BaseDataset):
         batch['label'] = data[4][idx]
         batch['domain_id'] = data[5][idx]
         if self.phase == 'train':
-            batch['neg_item'] = self._neg_sampling(batch['user_seq'])
+            batch['neg_item'] = self._neg_sampling(batch['user_seq'], self.config['max_seq_len'])
+        else:
+            batch['user_hist'] = batch['user_seq']
+        return batch
+
+class MixDataset(BaseDataset):
+    """Merge train/eval sequences into a mixed sequence.
+    """
+
+    def _load_datasets(self):
+        super()._load_datasets()
+        path_prefix = 'dataset'
+        if self.phase == 'train':
+            path = os.path.join(path_prefix, self.name)
+            data = torch.load(os.path.join(path, self.phase + '.pth'))
+            self._data = data
+        else:
+            data_list = []
+            for domain_name in self.domain_name_list:
+                path = os.path.join(path_prefix, self.name, domain_name)
+                data = torch.load(os.path.join(path, self.phase + '.pth'))
+                data_list.append(data)
+            self._data = data_list
+
+    def _build(self,):
+        if self.phase == 'train':
+            self.data = self.unpack(self._data)
+        else:
+            self.data = {
+                self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
+            }
+
+    def __getitem__(self, idx):
+        if self.phase == 'train':
+            data = self.data
+        else:
+            data = self.data[self.eval_domain]
+        batch = {}
+        batch['user_id'] = data[0][idx]
+        batch['user_seq'] = data[1][idx]
+        batch['target_item'] = data[2][idx]
+        batch['seq_len'] = data[3][idx]
+        batch['label'] = data[4][idx]
+        batch['domain_id'] = data[5][idx]
+        if self.phase == 'train':
+            batch['neg_item'] = self._neg_sampling(batch['user_seq'], self.num_domains * self.config['max_seq_len'])
         else:
             batch['user_hist'] = batch['user_seq']
         return batch
