@@ -83,6 +83,7 @@ class BaseModel(nn.Module):
     def fit_loop(self):
         try:
             nepoch = 0
+            self.train_start()
             for e in range(self.config['epochs']):
                 self.logged_metrics = {}
                 self.logged_metrics['epoch'] = nepoch
@@ -132,6 +133,9 @@ class BaseModel(nn.Module):
 
     def current_epoch_trainloaders(self, nepoch):
         return self.dataset_list[0].get_loader()
+
+    def train_start(self):
+        pass
 
     def training_epoch(self, nepoch):
         output_list = []
