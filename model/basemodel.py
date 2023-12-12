@@ -121,6 +121,7 @@ class BaseModel(nn.Module):
 
                 nepoch += 1
 
+            self.training_end()
             self.callback.save_checkpoint(nepoch)
             self.ckpt_path = self.callback.get_checkpoint_path()
         except KeyboardInterrupt:
@@ -179,6 +180,9 @@ class BaseModel(nn.Module):
             self.logged_metrics.update(loss_metric)
 
         self.logger.info(self.logged_metrics)
+
+    def training_end(self):
+        pass
 
     @torch.no_grad()
     def validation_epoch(self, nepoch, dataloader):
