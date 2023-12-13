@@ -57,8 +57,8 @@ class BaseDataset(Dataset):
             inter_data = pd.read_csv(os.path.join(path, 'inter.csv'))
             inter_list.append(inter_data)
         self._inter_data = pd.concat(inter_list)
-        self._num_users = len(self._inter_data['user_id'].unique())
-        self._num_items = len(self._inter_data['item_id'].unique())
+        self._num_users = len(self._inter_data['user_id'].unique()) + 1 # +1 for padding
+        self._num_items = len(self._inter_data['item_id'].unique()) + 1 # +1 for padding
 
     @property
     def num_users(self):
@@ -82,9 +82,9 @@ class BaseDataset(Dataset):
         return user_id, user_seq, target_item, seq_len, label, domain_id
     
     def _neg_sampling(self, user_hist, seq_len):
-        weight = torch.ones(self.num_items + 1)
+        weight = torch.ones(self.num_items)
         weight[user_hist] = 0.0
-        weight[-1] = 0 # padding
+        weight[0] = 0 # padding
         neg_idx = torch.multinomial(weight, self.config['num_neg'] * seq_len, replacement=True)
         neg_idx = neg_idx.reshape(seq_len, self.config['num_neg'])
         return neg_idx
