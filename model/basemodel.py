@@ -43,6 +43,16 @@ class BaseModel(nn.Module):
         self.optimizer = self._get_optimizers()
         self.loss_fn = self._get_loss_func()
 
+    def _neg_sampling(self, batch):
+        user_seq = batch['user_seq']
+        weight = torch.ones(user_seq.shape[0], self.num_items, device=self.device)
+        _idx = torch.arange(user_seq.size(0), device=self.device).view(-1, 1).expand_as(user_seq)
+        weight[_idx, user_seq] = 0.0
+        weight[:, 0] = 0 # padding
+        neg_idx = torch.multinomial(weight, self.config['num_neg'] * self.max_seq_len, replacement=True)
+        neg_idx = neg_idx.reshape(user_seq.shape[0], self.max_seq_len, self.config['num_neg'])
+        return neg_idx
+
     def _get_optimizers(self):
         opt_name = self.config['optimizer']
         lr = self.config['learning_rate']
@@ -154,6 +164,7 @@ class BaseModel(nn.Module):
             )
             for batch_idx, batch in enumerate(loader):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
+                batch['neg_item'] = self._neg_sampling(batch)
                 self.optimizer.zero_grad()
                 training_step_args = {'batch': batch}
                 loss = self.training_step(**training_step_args)

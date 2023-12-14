@@ -74,12 +74,12 @@ class BaseDataset(Dataset):
         return len(self.domain_name_list)
 
     def unpack(self, to_be_unpacked):
-        user_id = torch.tensor([_[0] for _ in to_be_unpacked])
-        user_seq = torch.tensor([_[1] for _ in to_be_unpacked])
-        target_item = torch.tensor([_[2] for _ in to_be_unpacked])
-        seq_len = torch.tensor([_[3] for _ in to_be_unpacked])
-        label = torch.tensor([_[4] for _ in to_be_unpacked])
-        domain_id = torch.tensor([_[5] for _ in to_be_unpacked])
+        user_id = torch.tensor([_[0] for _ in to_be_unpacked], device=self.device)
+        user_seq = torch.tensor([_[1] for _ in to_be_unpacked], device=self.device)
+        target_item = torch.tensor([_[2] for _ in to_be_unpacked], device=self.device)
+        seq_len = torch.tensor([_[3] for _ in to_be_unpacked], device=self.device)
+        label = torch.tensor([_[4] for _ in to_be_unpacked], device=self.device)
+        domain_id = torch.tensor([_[5] for _ in to_be_unpacked], device=self.device)
         return user_id, user_seq, target_item, seq_len, label, domain_id
     
     def _neg_sampling(self, user_hist, seq_len):
@@ -99,9 +99,9 @@ class BaseDataset(Dataset):
 
     def get_loader(self):
         if self.phase == 'train':
-            return DataLoader(self, self.config['batch_size'], shuffle=True, pin_memory=True)
+            return DataLoader(self, self.config['batch_size'], shuffle=True)
         else:
-            return DataLoader(self, self.config['eval_batch_size'], pin_memory=True)
+            return DataLoader(self, self.config['eval_batch_size'])
 
     def set_eval_domain(self, domain):
         self.eval_domain = domain
@@ -144,6 +144,7 @@ class SeparateDataset(BaseDataset):
         batch['label'] = data[4][idx]
         batch['domain_id'] = data[5][idx]
         if self.phase == 'train':
+            pass
             batch['neg_item'] = self._neg_sampling(batch['user_seq'], self.config['max_seq_len'])
         else:
             batch['user_hist'] = batch['user_seq']
