@@ -3,7 +3,7 @@ batch_size: 512
 early_stop_mode: max
 early_stop_patience: 40
 epochs: 1000
-device: 1
+device: 0
 optimizer: adam
 learning_rate: 0.001
 weight_decay: 0

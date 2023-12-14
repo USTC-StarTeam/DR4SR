@@ -76,6 +76,13 @@ def normal_initialization(module, initial_range=0.02):
         module.bias.data.zero_()
         module.weight.data.fill_(1.0)
 
+def get_parameter_list(model, detach=True):
+    para_list = [p.detach().cpu() for p in model.parameters()]
+    return para_list
+
+def flatten_state_dict(state_dict):
+    return torch.cat([p.flatten() for _, p in state_dict.items()])
+
 def load_config(config : dict):
     # dataset config
     path = os.path.join('configs', config['dataset'].lower() + '.yaml')

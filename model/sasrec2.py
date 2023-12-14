@@ -5,7 +5,7 @@ from model.basemodel import BaseModel
 from model.layers import SeqPoolingLayer
 from data import dataset
 
-class SASRec(BaseModel):
+class SASRec2(BaseModel):
     def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
         super().__init__(config, dataset_list)
         self.position_emb = torch.nn.Embedding(self.max_seq_len * dataset_list[0].num_domains, self.embed_dim)
@@ -42,31 +42,18 @@ class SASRec(BaseModel):
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
     def forward(self, batch):
-        user_seq, seq_len = batch['user_seq'], batch['seq_len']
-        positions = torch.arange(user_seq.size(1), dtype=torch.long, device=self.device)
-        positions = positions.unsqueeze(0).expand_as(user_seq)
+        seq_embs, seq_len = batch['seq_embs'], batch['seq_len']
+        positions = torch.arange(seq_embs.size(1), dtype=torch.long, device=self.device)
+        positions = positions.unsqueeze(0)
         position_embs = self.position_emb(positions)
-        seq_embs = self.item_embedding.weight[user_seq]
 
-        mask4padding = user_seq == -1  # BxL
-        L = user_seq.size(-1)
-        attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_seq.device), 1)
+        L = seq_embs.size(1)
+        attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=self.device), 1)
         transformer_out = self.transformer_layer(
             src=self.dropout(seq_embs+position_embs),
-            mask=attention_mask,
-            src_key_padding_mask=mask4padding
+            mask=attention_mask
         )  # BxLxD
         if self.training:
             return self.training_pooling_layer(transformer_out, seq_len)
         else:
             return self.eval_pooling_layer(transformer_out, seq_len)
-
-    # def training_step(self, batch):
-    #     user_embed = self.forward(batch).flatten(1)
-    #     item_embed = self.item_embedding.weight[batch['target_item']].flatten(1)
-        
-    #     align = self.alignment(user_embed, item_embed)
-    #     uniform = (self.uniformity(user_embed) + self.uniformity(item_embed)) / 2
-    #     loss_value = align + 3 * uniform
-
-    #     return loss_value
