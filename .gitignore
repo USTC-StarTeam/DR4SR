@@ -139,6 +139,7 @@ cython_debug/
 .vscode/
 **/log
 **/saved
-dataset/*
+*.csv
+*.pth
 wandb
 test.ipynb
