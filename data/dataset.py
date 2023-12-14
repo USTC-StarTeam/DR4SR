@@ -143,10 +143,7 @@ class SeparateDataset(BaseDataset):
         batch['seq_len'] = data[3][idx]
         batch['label'] = data[4][idx]
         batch['domain_id'] = data[5][idx]
-        if self.phase == 'train':
-            pass
-            batch['neg_item'] = self._neg_sampling(batch['user_seq'], self.config['max_seq_len'])
-        else:
+        if self.phase != 'train':
             batch['user_hist'] = batch['user_seq']
         return batch
 
