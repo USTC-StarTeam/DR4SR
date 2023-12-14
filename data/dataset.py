@@ -16,6 +16,7 @@ class BaseDataset(Dataset):
         self.phase = phase
         self.device = config['device']
         self.domain_name_list = self.config['domain_name_list']
+        self.max_seq_len = self.config['max_seq_len']
 
         # register attribute
         self._data = None
@@ -192,3 +193,50 @@ class MixDataset(BaseDataset):
         else:
             batch['user_hist'] = batch['user_seq']
         return batch
+    
+class CondenseDataset(SeparateDataset):
+    def _condense_sequences(self, data):
+        user_id, user_seq, target_item, seq_len, label, domain_id = data
+        sorted_seq_len, sorted_index = torch.sort(seq_len, descending=True)
+        sorted_seq_len = sorted_seq_len.tolist()
+        sorted_seq = user_seq[sorted_index].tolist()
+        sorted_target_item = target_item[sorted_index].tolist()
+        merged_data = [[], [], [], [], [], []]
+        pre_pointer, post_pointer = 0, len(user_seq) - 1
+        while(pre_pointer <= post_pointer):
+            cur_seq, cur_seq_len, cur_target_item = sorted_seq[pre_pointer], sorted_seq_len[pre_pointer], sorted_target_item[pre_pointer]
+            # find to to appended
+            while cur_seq_len <= self.max_seq_len:
+                post_seq_len = sorted_seq_len[post_pointer]
+                if (cur_seq_len + post_seq_len <= self.max_seq_len) and pre_pointer != post_pointer:
+                    cur_seq = cur_seq[:cur_seq_len] + sorted_seq[post_pointer][:post_seq_len]
+                    cur_target_item = cur_target_item[:cur_seq_len] + sorted_target_item[post_pointer][:post_seq_len]
+                    cur_seq_len = cur_seq_len + post_seq_len
+                    post_pointer -= 1
+                else:# Add padding and record this sequence
+                    cur_seq = torch.tensor(cur_seq[:cur_seq_len] + [0] * (self.max_seq_len - cur_seq_len))
+                    cur_target_item = torch.tensor(cur_target_item[:cur_seq_len] + [0] * (self.max_seq_len - cur_seq_len))
+                    cur_seq_len = torch.tensor([cur_seq_len])
+                    user_id_, label_, domain_id_ = torch.tensor([0]), torch.tensor([0]), torch.zeros_like(cur_seq)
+                    merged_data[0].append(user_id_) # useless
+                    merged_data[1].append(cur_seq)
+                    merged_data[2].append(cur_target_item)
+                    merged_data[3].append(cur_seq_len)
+                    merged_data[4].append(label_) # useless
+                    merged_data[5].append(domain_id_) # useless
+                    pre_pointer += 1
+                    break
+        merged_data = [torch.stack(_).squeeze() for _ in merged_data]
+        return merged_data
+
+    def _build(self):
+        if self.phase == 'train':
+            self.data = []
+            for _ in self._data:
+                self.data += _
+            self.data = self.unpack(self.data)
+            self.data = tuple(self._condense_sequences(self.data))
+        else:
+            self.data = {
+                self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
+            }

@@ -1,9 +1,9 @@
 # Training
-batch_size: 512
+batch_size: 1024
 early_stop_mode: max
-early_stop_patience: 40
+early_stop_patience: 10
 epochs: 1000
-device: 0
+device: 1
 optimizer: adam
 learning_rate: 0.001
 weight_decay: 0

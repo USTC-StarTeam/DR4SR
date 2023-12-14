@@ -28,6 +28,7 @@ class SASRec(BaseModel):
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
 
     def _get_dataset_class():
+        return dataset.CondenseDataset
         return dataset.SeparateDataset
         return dataset.MixDataset
 
