@@ -11,6 +11,8 @@ class BaseDataset(Dataset):
     def __init__(self, config, phase='train') -> None:
         super().__init__()
         self.name = config['dataset']
+        self.fuid = 'user_id'
+        self.fiid = 'item_id'
         self.logger = logging.getLogger('CDR')
         self.config = config
         self.phase = phase
@@ -137,14 +139,14 @@ class SeparateDataset(BaseDataset):
         else:
             data = self.data[self.eval_domain]
         batch = {}
-        batch['user_id'] = data[0][idx]
-        batch['user_seq'] = data[1][idx]
-        batch['target_item'] = data[2][idx]
+        batch[self.fuid] = data[0][idx]
+        batch['in_' + self.fiid] = data[1][idx]
+        batch[self.fiid] = data[2][idx]
         batch['seq_len'] = data[3][idx]
         batch['label'] = data[4][idx]
         batch['domain_id'] = data[5][idx]
         if self.phase != 'train':
-            batch['user_hist'] = batch['user_seq']
+            batch['user_hist'] = batch['in_' + self.fiid]
         return batch
 
 class MixDataset(BaseDataset):
@@ -180,16 +182,14 @@ class MixDataset(BaseDataset):
         else:
             data = self.data[self.eval_domain]
         batch = {}
-        batch['user_id'] = data[0][idx]
-        batch['user_seq'] = data[1][idx]
-        batch['target_item'] = data[2][idx]
+        batch[self.fuid] = data[0][idx]
+        batch['in_' + self.fiid] = data[1][idx]
+        batch[self.fiid] = data[2][idx]
         batch['seq_len'] = data[3][idx]
         batch['label'] = data[4][idx]
         batch['domain_id'] = data[5][idx]
-        if self.phase == 'train':
-            batch['neg_item'] = self._neg_sampling(batch['user_seq'], self.num_domains * self.config['max_seq_len'])
-        else:
-            batch['user_hist'] = batch['user_seq']
+        if self.phase != 'train':
+            batch['user_hist'] = batch['in_' + self.fiid]
         return batch
     
 class CondenseDataset(SeparateDataset):

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model.basemodel import BaseModel
-from model.layers import SeqPoolingLayer
+from module.layers import SeqPoolingLayer
 from data import dataset
 
 class SASRec(BaseModel):
@@ -43,7 +43,7 @@ class SASRec(BaseModel):
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
     def forward(self, batch):
-        user_seq, seq_len = batch['user_seq'], batch['seq_len']
+        user_seq, seq_len = batch['in_' + self.fiid], batch['seq_len']
         positions = torch.arange(user_seq.size(1), dtype=torch.long, device=self.device)
         positions = positions.unsqueeze(0).expand_as(user_seq)
         position_embs = self.position_emb(positions)
@@ -64,7 +64,7 @@ class SASRec(BaseModel):
 
     # def training_step(self, batch):
     #     user_embed = self.forward(batch).flatten(1)
-    #     item_embed = self.item_embedding.weight[batch['target_item']].flatten(1)
+    #     item_embed = self.item_embedding.weight[batch[self.fiid]].flatten(1)
         
     #     align = self.alignment(user_embed, item_embed)
     #     uniform = (self.uniformity(user_embed) + self.uniformity(item_embed)) / 2

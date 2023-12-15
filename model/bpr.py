@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from model.basemodel import BaseModel
-from model.layers import SeqPoolingLayer
+from module.layers import SeqPoolingLayer
 from data import dataset
 
 class BPR(BaseModel):

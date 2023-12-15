@@ -26,6 +26,8 @@ class BaseModel(nn.Module):
         self.logger = logging.getLogger('CDR')
         self.dataset_list = dataset_list
         self.device = config['device']
+        self.fuid = 'user_id'
+        self.fiid = 'item_id'
         self.domain_name_list = dataset_list[0].domain_name_list
         self.domain_user_mapping = dataset_list[0].domain_user_mapping
         self.domain_item_mapping = dataset_list[0].domain_item_mapping
@@ -37,7 +39,7 @@ class BaseModel(nn.Module):
         self.num_items = dataset_list[0].num_items
         self.item_embedding = nn.Embedding(self.num_items, self.embed_dim, padding_idx=0)
 
-    def init_model(self):
+    def init_model(self, train_data):
         self.apply(normal_initialization)
         self.item_embedding.weight[-1].data.copy_(torch.zeros(self.embed_dim))
         self = self.to(self.device)
@@ -45,7 +47,7 @@ class BaseModel(nn.Module):
         self.loss_fn = self._get_loss_func()
 
     def _neg_sampling(self, batch):
-        user_seq = batch['user_seq']
+        user_seq = batch['in_' + self.fiid]
         weight = torch.ones(user_seq.shape[0], self.num_items, device=self.device)
         _idx = torch.arange(user_seq.size(0), device=self.device).view(-1, 1).expand_as(user_seq)
         weight[_idx, user_seq] = 0.0
@@ -87,7 +89,7 @@ class BaseModel(nn.Module):
     def fit(self):
         self.callback = callbacks.EarlyStopping(self, 'ndcg@20', self.config['dataset'], patience=self.config['early_stop_patience'])
         self.logger.info('save_dir:' + self.callback.save_dir)
-        self.init_model()
+        self.init_model(self.dataset_list[0])
         self.logger.info(self)
         self.fit_loop()
 
@@ -178,9 +180,9 @@ class BaseModel(nn.Module):
     
     def training_step(self, batch):
         query = self.forward(batch)
-        pos_score = (query * self.item_embedding.weight[batch['target_item']]).sum(-1)
+        pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
         neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
-        pos_score[batch['target_item'] == 0] = -torch.inf # padding
+        pos_score[batch[self.fiid] == 0] = -torch.inf # padding
 
         loss_value = self.loss_fn(pos_score, neg_score)
         return loss_value
@@ -293,7 +295,7 @@ class BaseModel(nn.Module):
         bs = batch['user_id'].size(0)
         assert len(rank_m) > 0
         score, topk_items = self.topk(batch, topk, batch['user_hist'])
-        label = batch['target_item'].view(-1, 1) == topk_items
+        label = batch[self.fiid].view(-1, 1) == topk_items
         pos_rating = batch['label'].view(-1, 1)
         return {f"{name}@{cutoff}": func(label, pos_rating, cutoff) for cutoff in cutoffs for name, func in rank_m}, bs
     

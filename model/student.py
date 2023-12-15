@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 from model.basemodel import BaseModel
 from model.teacher import Teacher
-from model.layers import SeqPoolingLayer
+from module.layers import SeqPoolingLayer
 from data import dataset
 from utils.utils import flatten_state_dict, get_model_class
 import torch.nn.functional as F
@@ -101,7 +101,7 @@ class Student(BaseModel):
 
                     batch = {
                         'seq_embs': seq_embs,
-                        'target_item': target_item,
+                        self.fiid: target_item,
                         'seq_len': self.max_seq_len * torch.ones(seq_embs.shape[0], dtype=int, device=self.device)
                     }
 
@@ -164,7 +164,7 @@ class Student(BaseModel):
 
     # def training_step(self, batch):
     #     user_embed = self.forward(batch).flatten(1)
-    #     item_embed = batch['target_item'].flatten(1)
+    #     item_embed = batch[self.fiid].flatten(1)
 
         
     #     align = self.alignment(user_embed, item_embed)

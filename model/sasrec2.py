@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model.basemodel import BaseModel
-from model.layers import SeqPoolingLayer
+from module.layers import SeqPoolingLayer
 from data import dataset
 
 class SASRec2(BaseModel):
