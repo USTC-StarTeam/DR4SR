@@ -9,7 +9,7 @@ def run(config: dict):
         # Set the project where this run will be logged
         project="KDD2024", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"{config['model']['model'] + config['data']['dataset']}", 
+        name=f"{config['model']['model'] + '-' + config['data']['dataset']}", 
         # Track hyperparameters and run metadata
         config=config,
         # mode="disabled",
