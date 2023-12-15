@@ -24,8 +24,8 @@ class Student(BaseModel):
         model_class = get_model_class(sub_model_config)
         self.sub_model = ReparamModule(model_class(sub_model_config, dataset_list))
 
-    def init_model(self):
-        super().init_model()
+    def _init_model(self):
+        super()._init_model()
 
         self.item_embedding.requires_grad_(False) # item embedding of meta model is not used
         self.synthetic_dataset = nn.Embedding(self.synthetic_size, self.num_items, device=self.device)

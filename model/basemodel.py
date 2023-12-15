@@ -39,7 +39,7 @@ class BaseModel(nn.Module):
         self.num_items = dataset_list[0].num_items
         self.item_embedding = nn.Embedding(self.num_items, self.embed_dim, padding_idx=0)
 
-    def init_model(self, train_data):
+    def _init_model(self, train_data):
         self.apply(normal_initialization)
         self.item_embedding.weight[-1].data.copy_(torch.zeros(self.embed_dim))
         self = self.to(self.device)
@@ -89,7 +89,7 @@ class BaseModel(nn.Module):
     def fit(self):
         self.callback = callbacks.EarlyStopping(self, 'ndcg@20', self.config['dataset'], patience=self.config['early_stop_patience'])
         self.logger.info('save_dir:' + self.callback.save_dir)
-        self.init_model(self.dataset_list[0])
+        self._init_model(self.dataset_list[0])
         self.logger.info(self)
         self.fit_loop()
 
