@@ -9,12 +9,13 @@ def run(config: dict):
         # Set the project where this run will be logged
         project="KDD2024", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        # name=f"{config['model'] + config['dataset']}", 
+        name=f"{config['model']['model'] + config['data']['dataset']}", 
         # Track hyperparameters and run metadata
-        config=config
+        config=config,
+        # mode="disabled",
     )
 
-    log_path = f"{config['model']}/{config['dataset']}/{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')}.log"
+    log_path = f"{config['model']['model']}/{config['data']['dataset']}/{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')}.log"
     logger = get_logger(log_path)
 
     logger.info('PID of this process: {}'.format(os.getpid()))

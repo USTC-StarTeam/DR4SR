@@ -10,15 +10,15 @@ from torch.nn.utils.rnn import pad_sequence
 class BaseDataset(Dataset):
     def __init__(self, config, phase='train') -> None:
         super().__init__()
-        self.name = config['dataset']
+        self.name = config['data']['dataset']
         self.fuid = 'user_id'
         self.fiid = 'item_id'
         self.logger = logging.getLogger('CDR')
         self.config = config
         self.phase = phase
-        self.device = config['device']
-        self.domain_name_list = self.config['domain_name_list']
-        self.max_seq_len = self.config['max_seq_len']
+        self.device = config['train']['device']
+        self.domain_name_list = self.config['data']['domain_name_list']
+        self.max_seq_len = self.config['data']['max_seq_len']
 
         # register attribute
         self._data = None
@@ -84,14 +84,6 @@ class BaseDataset(Dataset):
         domain_id = torch.tensor([_[5] for _ in to_be_unpacked], device=self.device)
         return user_id, user_seq, target_item, seq_len, label, domain_id
     
-    def _neg_sampling(self, user_hist, seq_len):
-        weight = torch.ones(self.num_items)
-        weight[user_hist] = 0.0
-        weight[0] = 0 # padding
-        neg_idx = torch.multinomial(weight, self.config['num_neg'] * seq_len, replacement=True)
-        neg_idx = neg_idx.reshape(seq_len, self.config['num_neg'])
-        return neg_idx
-    
     def _build(self):
         self.data = None
         raise NotImplementedError
@@ -101,9 +93,9 @@ class BaseDataset(Dataset):
 
     def get_loader(self):
         if self.phase == 'train':
-            return DataLoader(self, self.config['batch_size'], shuffle=True)
+            return DataLoader(self, self.config['train']['batch_size'], shuffle=True)
         else:
-            return DataLoader(self, self.config['eval_batch_size'])
+            return DataLoader(self, self.config['eval']['batch_size'])
 
     def set_eval_domain(self, domain):
         self.eval_domain = domain

@@ -64,12 +64,12 @@ class SASRec(BaseModel):
             self.fiid,
             self.embed_dim,
             self.max_seq_len,
-            config['head_num'],
-            config['hidden_size'],
-            config['dropout_rate'],
-            config['activation'],
-            config['layer_norm_eps'],
-            config['layer_num'],
+            config['model']['head_num'],
+            config['model']['hidden_size'],
+            config['model']['dropout_rate'],
+            config['model']['activation'],
+            config['model']['layer_norm_eps'],
+            config['model']['layer_num'],
             self.item_embedding,
         )
 

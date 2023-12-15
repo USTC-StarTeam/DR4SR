@@ -12,6 +12,6 @@ if __name__ == '__main__':
     config = load_config(config)
     pprint.pprint(config)
 
-    setup_environment(config)
+    setup_environment(config['train'])
 
     quickstart.run(config)

@@ -25,7 +25,7 @@ class BaseModel(nn.Module):
         self.ckpt_path = None
         self.logger = logging.getLogger('CDR')
         self.dataset_list = dataset_list
-        self.device = config['device']
+        self.device = config['train']['device']
         self.fuid = 'user_id'
         self.fiid = 'item_id'
         self.domain_name_list = dataset_list[0].domain_name_list
@@ -33,8 +33,8 @@ class BaseModel(nn.Module):
         self.domain_item_mapping = dataset_list[0].domain_item_mapping
 
         # register mode-relevant parameters
-        self.embed_dim = config['embed_dim']
-        self.max_seq_len = config['max_seq_len']
+        self.embed_dim = config['model']['embed_dim']
+        self.max_seq_len = config['data']['max_seq_len']
         self.num_users = dataset_list[0].num_users
         self.num_items = dataset_list[0].num_items
         self.item_embedding = nn.Embedding(self.num_items, self.embed_dim, padding_idx=0)
@@ -52,14 +52,14 @@ class BaseModel(nn.Module):
         _idx = torch.arange(user_seq.size(0), device=self.device).view(-1, 1).expand_as(user_seq)
         weight[_idx, user_seq] = 0.0
         weight[:, 0] = 0 # padding
-        neg_idx = torch.multinomial(weight, self.config['num_neg'] * self.max_seq_len, replacement=True)
-        neg_idx = neg_idx.reshape(user_seq.shape[0], self.max_seq_len, self.config['num_neg'])
+        neg_idx = torch.multinomial(weight, self.config['train']['num_neg'] * self.max_seq_len, replacement=True)
+        neg_idx = neg_idx.reshape(user_seq.shape[0], self.max_seq_len, self.config['train']['num_neg'])
         return neg_idx
 
     def _get_optimizers(self):
-        opt_name = self.config['optimizer']
-        lr = self.config['learning_rate']
-        weight_decay = self.config['weight_decay']
+        opt_name = self.config['train']['optimizer']
+        lr = self.config['train']['learning_rate']
+        weight_decay = self.config['train']['weight_decay']
         params = self.parameters()
 
         if opt_name.lower() == 'adam':
@@ -78,16 +78,16 @@ class BaseModel(nn.Module):
         return optimizer
 
     def _get_loss_func(self):
-        if self.config['loss_fn'] == 'bce':
+        if self.config['model']['loss_fn'] == 'bce':
             return BinaryCrossEntropyLoss()
-        elif self.config['loss_fn'] == 'bpr':
+        elif self.config['model']['loss_fn'] == 'bpr':
             return BPRLoss()
 
     def forward(self):
         raise NotImplementedError
 
     def fit(self):
-        self.callback = callbacks.EarlyStopping(self, 'ndcg@20', self.config['dataset'], patience=self.config['early_stop_patience'])
+        self.callback = callbacks.EarlyStopping(self, 'ndcg@20', self.config['data']['dataset'], patience=self.config['train']['early_stop_patience'])
         self.logger.info('save_dir:' + self.callback.save_dir)
         self._init_model(self.dataset_list[0])
         self.logger.info(self)
@@ -97,7 +97,7 @@ class BaseModel(nn.Module):
         try:
             nepoch = 0
             self.train_start()
-            for e in range(self.config['epochs']):
+            for e in range(self.config['train']['epochs']):
                 self.logged_metrics = {}
                 self.logged_metrics['epoch'] = nepoch
 
@@ -236,8 +236,8 @@ class BaseModel(nn.Module):
         return output_list
 
     def validation_epoch_end(self, outputs, domain):
-        val_metrics = self.config['val_metrics']
-        cutoff = self.config['cutoff']
+        val_metrics = self.config['eval']['val_metrics']
+        cutoff = self.config['eval']['cutoff']
         val_metric = evaluation.get_eval_metrics(val_metrics, cutoff, validation=True)
         if isinstance(outputs[0][0], List):
             out = self._test_epoch_end(outputs, val_metric)
@@ -249,8 +249,8 @@ class BaseModel(nn.Module):
         return out
 
     def test_epoch_end(self, outputs, domain):
-        test_metrics = self.config['test_metrics']
-        cutoff = self.config['cutoff']
+        test_metrics = self.config['eval']['test_metrics']
+        cutoff = self.config['eval']['cutoff']
         test_metric = evaluation.get_eval_metrics(test_metrics, cutoff, validation=False)
         if isinstance(outputs[0][0], List):
             out = self._test_epoch_end(outputs, test_metric)
@@ -280,18 +280,18 @@ class BaseModel(nn.Module):
         return out
 
     def validation_step(self, batch):
-        eval_metric = self.config['val_metrics']
-        cutoff = self.config['cutoff'][0]
+        eval_metric = self.config['eval']['val_metrics']
+        cutoff = self.config['eval']['cutoff'][0]
         return self._test_step(batch, eval_metric, [cutoff])
 
     def test_step(self, batch):
-        eval_metric = self.config['test_metrics']
-        cutoffs = self.config['cutoff']
+        eval_metric = self.config['eval']['test_metrics']
+        cutoffs = self.config['eval']['cutoff']
         return self._test_step(batch, eval_metric, cutoffs)
     
     def _test_step(self, batch, metric, cutoffs):
         rank_m = evaluation.get_rank_metrics(metric)
-        topk = self.config['topk']
+        topk = self.config['eval']['topk']
         bs = batch['user_id'].size(0)
         assert len(rank_m) > 0
         score, topk_items = self.topk(batch, topk, batch['user_hist'])
@@ -302,7 +302,7 @@ class BaseModel(nn.Module):
     def topk(self, batch, k, user_h=None):
         query = self.forward(batch)
         more = user_h.size(1) if user_h is not None else 0
-        real_score = query @ self.item_embedding.weight.T
+        real_score = query @ self.item_embedding.weight[:self.num_items].T # remove extra padding
         domain_mask = torch.ones(1, self.num_items, dtype=torch.bool, device=self.device)
         domain_mask[:, self.domain_item_mapping[self.eval_domain]] = 0
         masked_score : torch.Tensor = real_score.masked_fill(domain_mask, -torch.inf)
@@ -329,7 +329,7 @@ class BaseModel(nn.Module):
         """
         test_data = self.dataset_list[-1]
         output = defaultdict(float)
-        self.load_checkpoint(os.path.join(self.config['save_path'], self.ckpt_path))
+        self.load_checkpoint(os.path.join(self.config['eval']['save_path'], self.ckpt_path))
         self.eval()
 
         for domain in self.domain_name_list:

@@ -5,6 +5,7 @@ import numpy as np
 import os
 import importlib
 import torch.nn as nn
+from copy import deepcopy
 
 def seed_everything(seed=1111):
     random.seed(seed)
@@ -32,7 +33,7 @@ def get_model_class(config):
     return model_class
 
 def prepare_datasets(config):
-    model_class = get_model_class(config)
+    model_class = get_model_class(config['model'])
     dataset_class = model_class._get_dataset_class()
 
     train_dataset = dataset_class(config, phase='train')
@@ -46,7 +47,7 @@ def prepare_datasets(config):
     return train_dataset, val_dataset, test_dataset
 
 def prepare_model(config, dataset_list):
-    model_class = get_model_class(config)
+    model_class = get_model_class(config['model'])
     model = model_class(config, dataset_list)
     return model
 
@@ -87,13 +88,19 @@ def load_config(config : dict):
     # dataset config
     path = os.path.join('configs', config['dataset'].lower() + '.yaml')
     with open(path, "r") as stream:
-        config.update(yaml.safe_load(stream))
+        config['data'] = yaml.safe_load(stream)
+    config['data']['dataset'] = deepcopy(config['dataset'])
+    config.pop('dataset')
     # basemodel config
+    model_name = deepcopy(config['model'])
     path = os.path.join('configs', 'basemodel.yaml')
     with open(path, "r") as stream:
         config.update(yaml.safe_load(stream))
     # model config
-    path = os.path.join('configs', config['model'].lower() + '.yaml')
+    path = os.path.join('configs', model_name.lower() + '.yaml')
     with open(path, "r") as stream:
-        config.update(yaml.safe_load(stream))
+        model_config = yaml.safe_load(stream)
+        for key, value in model_config.items():
+            config[key].update(value)
+    config['model']['model'] = model_name
     return config
