@@ -60,7 +60,7 @@ class SASRecQueryEncoder(torch.nn.Module):
 class SASRec(BaseModel):
     def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
         super().__init__(config, dataset_list)
-        self.item_encoder = SASRecQueryEncoder(
+        self.query_encoder = SASRecQueryEncoder(
             self.fiid,
             self.embed_dim,
             self.max_seq_len,
@@ -89,7 +89,7 @@ class SASRec(BaseModel):
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
     def forward(self, batch):
-        return self.item_encoder(batch)
+        return self.query_encoder(batch)
 
     # def training_step(self, batch):
     #     user_embed = self.forward(batch).flatten(1)
