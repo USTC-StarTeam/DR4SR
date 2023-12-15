@@ -1,9 +1,19 @@
 import os
+import wandb
 import datetime
 
 from utils import *
 
 def run(config: dict):
+    wandb.init(
+        # Set the project where this run will be logged
+        project="KDD2024", 
+        # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+        # name=f"{config['model'] + config['dataset']}", 
+        # Track hyperparameters and run metadata
+        config=config
+    )
+
     log_path = f"{config['model']}/{config['dataset']}/{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')}.log"
     logger = get_logger(log_path)
 
@@ -16,3 +26,4 @@ def run(config: dict):
 
     model.fit()
     model.evaluate()
+    wandb.finish()

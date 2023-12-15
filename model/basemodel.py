@@ -1,4 +1,5 @@
 import os
+import wandb
 import torch
 import logging
 import time
@@ -121,6 +122,7 @@ class BaseModel(nn.Module):
                                 all_domain_result[k.removeprefix(domain_name + '_')] += v
                                 break
                     self.logged_metrics.update(all_domain_result)
+                    wandb.log(all_domain_result)
                 tok_valid = time.time()
 
                 self.training_epoch_end(training_output_list)
@@ -342,6 +344,7 @@ class BaseModel(nn.Module):
         output.update(all_domain_result)
 
         self.logger.info(output)
+        wandb.log(output)
         return output
     
     def load_checkpoint(self, path: str) -> None:
