@@ -31,6 +31,8 @@ class BaseModel(nn.Module):
         self.domain_name_list = dataset_list[0].domain_name_list
         self.domain_user_mapping = dataset_list[0].domain_user_mapping
         self.domain_item_mapping = dataset_list[0].domain_item_mapping
+        self.training_time = 0
+        self.inference_time = 0
 
         # register mode-relevant parameters
         self.embed_dim = config['model']['embed_dim']
@@ -106,6 +108,7 @@ class BaseModel(nn.Module):
                 self.train()
                 training_output_list = self.training_epoch(nepoch)
                 tok_train = time.time()
+                self.training_time += tok_train - tik_train
 
                 # validation procedure
                 tik_valid = time.time()
@@ -126,6 +129,7 @@ class BaseModel(nn.Module):
                     self.logged_metrics.update(all_domain_result)
                     wandb.log(all_domain_result)
                 tok_valid = time.time()
+                self.inference_time += tok_valid - tik_valid
 
                 self.training_epoch_end(training_output_list)
 
@@ -199,6 +203,8 @@ class BaseModel(nn.Module):
             self.logged_metrics.update(loss_metric)
 
         self.logger.info(self.logged_metrics)
+        self.logger.info(f'training_time: {self.training_time}')
+        self.logger.info(f'inference_time: {self.inference_time}')
 
     def training_end(self):
         pass
@@ -347,6 +353,7 @@ class BaseModel(nn.Module):
 
         self.logger.info(output)
         wandb.log(output)
+        wandb.log({'training_time': self.training_time, 'inference_time': self.inference_time})
         return output
     
     def load_checkpoint(self, path: str) -> None:
