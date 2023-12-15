@@ -142,7 +142,7 @@ class SeparateDataset(BaseDataset):
         batch[self.fuid] = data[0][idx]
         batch['in_' + self.fiid] = data[1][idx]
         batch[self.fiid] = data[2][idx]
-        batch['seq_len'] = data[3][idx]
+        batch['seqlen'] = data[3][idx]
         batch['label'] = data[4][idx]
         batch['domain_id'] = data[5][idx]
         if self.phase != 'train':
@@ -185,7 +185,7 @@ class MixDataset(BaseDataset):
         batch[self.fuid] = data[0][idx]
         batch['in_' + self.fiid] = data[1][idx]
         batch[self.fiid] = data[2][idx]
-        batch['seq_len'] = data[3][idx]
+        batch['seqlen'] = data[3][idx]
         batch['label'] = data[4][idx]
         batch['domain_id'] = data[5][idx]
         if self.phase != 'train':

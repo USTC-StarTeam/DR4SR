@@ -42,7 +42,7 @@ class SASRec2(BaseModel):
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
     def forward(self, batch):
-        seq_embs, seq_len = batch['seq_embs'], batch['seq_len']
+        seq_embs, seq_len = batch['seq_embs'], batch['seqlen']
         positions = torch.arange(seq_embs.size(1), dtype=torch.long, device=self.device)
         positions = positions.unsqueeze(0)
         position_embs = self.position_emb(positions)

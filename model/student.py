@@ -102,7 +102,7 @@ class Student(BaseModel):
                     batch = {
                         'seq_embs': seq_embs,
                         self.fiid: target_item,
-                        'seq_len': self.max_seq_len * torch.ones(seq_embs.shape[0], dtype=int, device=self.device)
+                        'seqlen': self.max_seq_len * torch.ones(seq_embs.shape[0], dtype=int, device=self.device)
                     }
 
                     # user_embed = self.sub_model.forward(batch, flat_param=student_params[-1]).flatten(1)

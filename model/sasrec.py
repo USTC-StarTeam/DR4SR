@@ -5,27 +5,73 @@ from model.basemodel import BaseModel
 from module.layers import SeqPoolingLayer
 from data import dataset
 
-class SASRec(BaseModel):
-    def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
-        super().__init__(config, dataset_list)
-        self.position_emb = torch.nn.Embedding(self.max_seq_len * dataset_list[0].num_domains, self.embed_dim)
+class SASRecQueryEncoder(torch.nn.Module):
+    def __init__(
+            self, fiid, embed_dim, max_seq_len, n_head, hidden_size, dropout, activation, layer_norm_eps, n_layer, item_encoder,
+            bidirectional=False, training_pooling_type='origin', eval_pooling_type='last') -> None:
+        super().__init__()
+        self.fiid = fiid
+        self.item_encoder = item_encoder
+        self.bidirectional = bidirectional
+        self.training_pooling_type = training_pooling_type
+        self.eval_pooling_type = eval_pooling_type
+        self.position_emb = torch.nn.Embedding(max_seq_len, embed_dim)
         transformer_encoder = torch.nn.TransformerEncoderLayer(
-            d_model=self.embed_dim,
-            nhead=config['head_num'],
-            dim_feedforward=config['hidden_size'],
-            dropout=config['dropout_rate'],
-            activation=config['activation'],
-            layer_norm_eps=config['layer_norm_eps'],
+            d_model=embed_dim,
+            nhead=n_head,
+            dim_feedforward=hidden_size,
+            dropout=dropout,
+            activation=activation,
+            layer_norm_eps=layer_norm_eps,
             batch_first=True,
             norm_first=False
         )
         self.transformer_layer = torch.nn.TransformerEncoder(
             encoder_layer=transformer_encoder,
-            num_layers=config['layer_num'],
+            num_layers=n_layer,
         )
-        self.dropout = torch.nn.Dropout(p=config['dropout_rate'])
-        self.training_pooling_layer = SeqPoolingLayer(pooling_type='origin')
-        self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
+        self.dropout = torch.nn.Dropout(p=dropout)
+        self.training_pooling_layer = SeqPoolingLayer(pooling_type=self.training_pooling_type)
+        self.eval_pooling_layer = SeqPoolingLayer(pooling_type=self.eval_pooling_type)
+
+    def forward(self, batch, need_pooling=True):
+        user_hist = batch['in_'+self.fiid]
+        positions = torch.arange(user_hist.size(1), dtype=torch.long, device=user_hist.device)
+        positions = positions.unsqueeze(0).expand_as(user_hist)
+        position_embs = self.position_emb(positions)
+        seq_embs = self.item_encoder(user_hist)
+
+        mask4padding = user_hist == 0  # BxL
+        L = user_hist.size(-1)
+        if not self.bidirectional:
+            attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_hist.device), 1)
+        else:
+            attention_mask = torch.zeros((L, L), dtype=torch.bool, device=user_hist.device)
+        transformer_out = self.transformer_layer(
+            src=self.dropout(seq_embs+position_embs),
+            mask=attention_mask,
+            src_key_padding_mask=mask4padding)  # BxLxD
+
+        if self.training:
+            return self.training_pooling_layer(transformer_out, batch['seqlen'])
+        else:
+            return self.eval_pooling_layer(transformer_out, batch['seqlen'])
+
+class SASRec(BaseModel):
+    def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
+        super().__init__(config, dataset_list)
+        self.item_encoder = SASRecQueryEncoder(
+            self.fiid,
+            self.embed_dim,
+            self.max_seq_len,
+            config['head_num'],
+            config['hidden_size'],
+            config['dropout_rate'],
+            config['activation'],
+            config['layer_norm_eps'],
+            config['layer_num'],
+            self.item_embedding,
+        )
 
     def _get_dataset_class():
         return dataset.CondenseDataset
@@ -43,24 +89,7 @@ class SASRec(BaseModel):
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
     def forward(self, batch):
-        user_seq, seq_len = batch['in_' + self.fiid], batch['seq_len']
-        positions = torch.arange(user_seq.size(1), dtype=torch.long, device=self.device)
-        positions = positions.unsqueeze(0).expand_as(user_seq)
-        position_embs = self.position_emb(positions)
-        seq_embs = self.item_embedding.weight[user_seq]
-
-        mask4padding = user_seq == -1  # BxL
-        L = user_seq.size(-1)
-        attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_seq.device), 1)
-        transformer_out = self.transformer_layer(
-            src=self.dropout(seq_embs+position_embs),
-            mask=attention_mask,
-            src_key_padding_mask=mask4padding
-        )  # BxLxD
-        if self.training:
-            return self.training_pooling_layer(transformer_out, seq_len)
-        else:
-            return self.eval_pooling_layer(transformer_out, seq_len)
+        return self.item_encoder(batch)
 
     # def training_step(self, batch):
     #     user_embed = self.forward(batch).flatten(1)
