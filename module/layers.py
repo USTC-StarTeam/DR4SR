@@ -1,5 +1,7 @@
+from typing import Tuple
 import torch
 import torch.nn as nn
+from torch.nn.parameter import Parameter
 
 class SeqPoolingLayer(nn.Module):
     def __init__(self, pooling_type='mean', keepdim=False) -> None:
@@ -72,3 +74,60 @@ class SeqPoolingLayer(nn.Module):
         else:
             return result
         
+
+class HStackLayer(torch.nn.Sequential):
+
+    def forward(self, *input):
+        output = []
+        assert (len(input) == 1) or (len(input) == len(list(self.children())))
+        for i, module in enumerate(self):
+            if len(input) == 1:
+                output.append(module(input[0]))
+            else:
+                output.append(module(input[i]))
+        return tuple(output)
+
+
+class VStackLayer(torch.nn.Sequential):
+
+    def forward(self, input):
+        for module in self:
+            if isinstance(input, Tuple):
+                input = module(*input)
+            else:
+                input = module(input)
+        return input
+    
+class LambdaLayer(torch.nn.Module):
+    def __init__(self, lambda_func) -> None:
+        super().__init__()
+        self.lambda_func = lambda_func
+
+    def forward(self, *args):
+        # attention: all data input into LambdaLayer will be tuple
+        # even if there is only one input, the args will be the tuple of length 1
+        if len(args) == 1:  # only one input
+            return self.lambda_func(args[0])
+        else:
+            return self.lambda_func(args)
+        
+class GRULayer(torch.nn.Module):
+    def __init__(self, input_dim, output_dim, num_layer=1, bias=False, batch_first=True,
+                 bidirectional=False, return_hidden=False) -> None:
+        super().__init__()
+        self.gru = torch.nn.GRU(
+            input_size=input_dim,
+            hidden_size=output_dim,
+            num_layers=num_layer,
+            bias=bias,
+            batch_first=batch_first,
+            bidirectional=bidirectional
+        )
+        self.return_hidden = return_hidden
+
+    def forward(self, input):
+        out, hidden = self.gru(input)
+        if self.return_hidden:
+            return out, hidden
+        else:
+            return out
