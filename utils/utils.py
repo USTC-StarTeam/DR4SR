@@ -104,3 +104,26 @@ def load_config(config : dict):
             config[key].update(value)
     config['model']['model'] = model_name
     return config
+
+def load_sweep_config(config):
+    path = os.path.join('sweep', config['model']['model'].lower() + '.yaml')
+    sweep_config = {}
+    with open(path, "r") as stream:
+        model_config = yaml.safe_load(stream)
+        for key, value in model_config.items():
+            sweep_config[key] = value
+    return sweep_config
+
+def transform_config_into_sweep_config(sweep_config, config):
+    for category_k, category_v in config.items():
+        for entry_k, entry_v in category_v.items():
+            if sweep_config['parameters'].get(category_k + '.' + entry_k, None) == None:
+                sweep_config['parameters'][category_k + '.' + entry_k] = {'value': entry_v}
+    return sweep_config
+
+def transform_sweep_config_into_config(sweep_config):
+    config = {'data': {}, 'model': {}, 'train': {}, 'eval': {}}
+    for k, v in sweep_config.items():
+        key = k.split('.')
+        config[key[0]][key[1]] = v
+    return config

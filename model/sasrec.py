@@ -74,9 +74,9 @@ class SASRec(BaseModel):
         )
 
     def _get_dataset_class(config):
-        if config['data']['condense']:
+        if config['data']['dataset_class'] == 'condense':
             return dataset.CondenseDataset
-        else:
+        elif config['data']['dataset_class'] == 'general':
             return dataset.SeparateDataset
 
     @staticmethod

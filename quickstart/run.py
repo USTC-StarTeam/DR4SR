@@ -28,3 +28,23 @@ def run(config: dict):
     model.fit()
     model.evaluate()
     wandb.finish()
+
+
+def tune(config: dict = None):
+    with wandb.init(config=config):
+        # If called by wandb.agent, as below,
+        # this config will be set by Sweep Controller
+        config = wandb.config
+        config = transform_sweep_config_into_config(config)
+        log_path = f"{config['model']['model']}/{config['data']['dataset']}/{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')}.log"
+        logger = get_logger(log_path)
+
+        logger.info('PID of this process: {}'.format(os.getpid()))
+
+        dataset_list = prepare_datasets(config)
+        logger.info(dataset_list[0])
+
+        model = prepare_model(config, dataset_list)
+
+        model.fit()
+        model.evaluate()
