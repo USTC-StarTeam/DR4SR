@@ -34,7 +34,7 @@ def get_model_class(config):
 
 def prepare_datasets(config):
     model_class = get_model_class(config['model'])
-    dataset_class = model_class._get_dataset_class()
+    dataset_class = model_class._get_dataset_class(config)
 
     train_dataset = dataset_class(config, phase='train')
     val_dataset = dataset_class(config, phase='val')

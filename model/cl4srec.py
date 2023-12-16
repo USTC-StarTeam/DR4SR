@@ -47,10 +47,11 @@ class CL4SRec(SASRec):
         super()._init_model(train_data)
         self.augmentation_model = data_augmentation.CL4SRecAugmentation(self.config['model'], train_data)
 
-    def _get_dataset_class():
-        return dataset.CondenseDataset
-        return dataset.SeparateDataset
-        return dataset.MixDataset
+    def _get_dataset_class(config):
+        if config['data']['condense']:
+            return dataset.CondenseDataset
+        else:
+            return dataset.SeparateDataset
 
     def training_step(self, batch):
         query = self.forward(batch)

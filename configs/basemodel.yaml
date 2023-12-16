@@ -1,9 +1,9 @@
 train: 
-  batch_size: 512
+  batch_size: 64
   early_stop_mode: max
-  early_stop_patience: 20
+  early_stop_patience: 40
   epochs: 1000
-  device: 0
+  device: 1
   optimizer: adam
   learning_rate: 0.001
   weight_decay: 0
@@ -15,7 +15,7 @@ model:
   loss_fn: 'bce'
 
 eval:
-  batch_size: 1024
+  batch_size: 4096
   cutoff: [20, 10]
   val_metrics: [ndcg, recall]
   test_metrics: [ndcg, recall]

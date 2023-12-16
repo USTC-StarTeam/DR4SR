@@ -58,6 +58,9 @@ class BaseModel(nn.Module):
         neg_idx = neg_idx.reshape(user_seq.shape[0], self.max_seq_len, self.config['train']['num_neg'])
         return neg_idx
 
+    def _get_dataset_class(config):
+        raise NotImplementedError
+
     def _get_optimizers(self):
         opt_name = self.config['train']['optimizer']
         lr = self.config['train']['learning_rate']
