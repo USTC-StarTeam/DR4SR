@@ -14,7 +14,7 @@ if __name__ == '__main__':
     setup_environment(config['train'])
 
     sweep_config = {
-        'method': 'random',
+        'method': 'grid',
         'metric': {
             'name': 'ndcg@20',
             'goal': 'maximize'   
