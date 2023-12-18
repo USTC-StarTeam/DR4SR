@@ -2,4 +2,4 @@ data.dataset_class:
   values: ['condense', 'general']
 
 train.batch_size:
-  values: [64, 128, 256, 512]
+  values: [128, 256, 512]

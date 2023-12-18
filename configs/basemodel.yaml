@@ -15,7 +15,7 @@ model:
   loss_fn: 'bce'
 
 eval:
-  batch_size: 4096
+  batch_size: 256
   cutoff: [20, 10]
   val_metrics: [ndcg, recall]
   test_metrics: [ndcg, recall]
