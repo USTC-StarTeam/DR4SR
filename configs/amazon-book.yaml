@@ -1,5 +1,5 @@
 domain_name_list: ['book']
 user_threshold: 5
 item_threshold: 5
-max_seq_len: 20
-dataset_class: 'condense'
+max_seq_len: 50
+dataset_class: 'general'

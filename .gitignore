@@ -143,3 +143,4 @@ cython_debug/
 *.pth
 wandb
 test.ipynb
+seq_len/

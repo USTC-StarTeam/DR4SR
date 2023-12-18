@@ -2,4 +2,4 @@ domain_name_list: ['movie']
 user_threshold: 5
 item_threshold: 5
 max_seq_len: 20
-dataset_class: 'condense'
+dataset_class: 'general'
