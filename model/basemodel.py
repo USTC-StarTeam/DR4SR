@@ -10,7 +10,7 @@ from torch import optim
 from utils import callbacks
 from collections import defaultdict
 from model.loss_func import *
-from data.dataset import BaseDataset
+from data.dataset import *
 from typing import Dict, List, Optional, Tuple
 
 from utils.utils import xavier_normal_initialization, normal_initialization
@@ -59,7 +59,12 @@ class BaseModel(nn.Module):
         return neg_idx
 
     def _get_dataset_class(config):
-        raise NotImplementedError
+        if config['data']['dataset_class'] == 'condense':
+            return CondenseDataset
+        elif config['data']['dataset_class'] == 'general':
+            return SeparateDataset
+        elif config['data']['dataset_class'] == 'selection':
+            return SelectionDataset
 
     def _get_optimizers(self):
         opt_name = self.config['train']['optimizer']

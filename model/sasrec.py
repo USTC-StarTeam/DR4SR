@@ -73,12 +73,6 @@ class SASRec(BaseModel):
             self.item_embedding,
         )
 
-    def _get_dataset_class(config):
-        if config['data']['dataset_class'] == 'condense':
-            return dataset.CondenseDataset
-        elif config['data']['dataset_class'] == 'general':
-            return dataset.SeparateDataset
-
     @staticmethod
     def alignment(x, y):
         x, y = F.normalize(x, dim=-1), F.normalize(y, dim=-1)

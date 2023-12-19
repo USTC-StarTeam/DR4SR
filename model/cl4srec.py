@@ -47,12 +47,6 @@ class CL4SRec(SASRec):
         super()._init_model(train_data)
         self.augmentation_model = data_augmentation.CL4SRecAugmentation(self.config['model'], train_data)
 
-    def _get_dataset_class(config):
-        if config['data']['dataset_class'] == 'condense':
-            return dataset.CondenseDataset
-        elif config['data']['dataset_class'] == 'general':
-            return dataset.SeparateDataset
-
     def training_step(self, batch):
         query = self.forward(batch)
         pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
