@@ -230,3 +230,34 @@ class CondenseDataset(SeparateDataset):
             self.data = {
                 self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
             }
+
+class SelectionDataset(SeparateDataset):
+    def __init__(self, config, phase='train') -> None:
+        super().__init__(config, phase)
+        self.strategy = 'random'
+
+    def _condense_sequences(self, data):
+        user_id, user_seq, target_item, seq_len, label, domain_id = data
+        N = len(user_id)
+        if self.strategy == 'random':
+            selection = torch.randperm(N)[: int(N * 0.8)].tolist()
+        return (
+            user_id[selection],
+            user_seq[selection],
+            target_item[selection],
+            seq_len[selection],
+            label[selection],
+            domain_id[selection],
+        )
+
+    def _build(self):
+        if self.phase == 'train':
+            self.data = []
+            for _ in self._data:
+                self.data += _
+            self.data = self.unpack(self.data)
+            self.data = tuple(self._condense_sequences(self.data))
+        else:
+            self.data = {
+                self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
+            }
