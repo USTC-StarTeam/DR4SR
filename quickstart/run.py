@@ -12,7 +12,7 @@ def run(config: dict):
         name=f"{config['model']['model'] + '-' + config['data']['dataset']}", 
         # Track hyperparameters and run metadata
         config=config,
-        mode="disabled",
+        # mode="disabled",
     )
 
     log_path = f"{config['model']['model']}/{config['data']['dataset']}/{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')}.log"

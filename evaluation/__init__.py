@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torchmetrics.functional as M
 
 
-def recall(pred, target, k_or_thres):
+def recall(pred, target, k_or_thres, mean=True):
     r"""Calculating recall.
 
     Recall value is defined as below:
@@ -27,7 +27,10 @@ def recall(pred, target, k_or_thres):
         k = k_or_thres
         count = (target > 0).sum(-1)
         output = pred[:, :k].sum(dim=-1).float() / count
-        return output.mean()
+        if mean:
+            return output.mean()
+        else:
+            return output
     else:
         thres = k_or_thres
         return M.recall(pred, target, task='binary', threshold=thres)
@@ -107,7 +110,7 @@ def _dcg(pred, k):
     return (pred[:, :k] / denom).sum(dim=-1)
 
 
-def ndcg(pred, target, k):
+def ndcg(pred, target, k, mean=True):
     r"""Calculate the Normalized Discounted Cumulative Gain(NDCG).
 
     Args:
@@ -125,7 +128,10 @@ def ndcg(pred, target, k):
     all_irrelevant = torch.all(target <= sys.float_info.epsilon, dim=-1)
     pred_dcg[all_irrelevant] = 0
     pred_dcg[~all_irrelevant] /= ideal_dcg[~all_irrelevant]
-    return pred_dcg.mean()
+    if mean:
+        return pred_dcg.mean()
+    else:
+        return pred_dcg
 
 
 def mrr(pred, target, k):
