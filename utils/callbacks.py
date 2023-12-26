@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import copy
 import logging
+import matplotlib.pyplot as plt
+import wandb
 
 from typing import List, Union, Tuple, Dict, Optional
 
@@ -135,3 +137,98 @@ class EarlyStopping(object):
 
     def get_checkpoint_path(self):
         return self._best_ckpt_path
+
+class Analyzer(object):
+    def __init__(self, model):
+        self.model = model
+        self.logged_metrics = None
+        self.user_id = None
+        self.user_hist = None
+        self.counter = 0
+        self.chunk_size = 5
+
+    def record_batch(self, user_id, user_hist, batch):
+        if self.logged_metrics == None:
+            self.logged_metrics = {k: [] for k in batch}
+            self.user_id = []
+            self.user_hist = []
+
+        for k, v in batch.items():
+            self.logged_metrics[k].append(v)
+        self.user_id.append(user_id)
+        self.user_hist.append(user_hist)
+    
+    def analyze_epoch(self):
+        if self.counter % 10 == 0:
+            epoch_rst = {k: torch.cat(v) for k, v in self.logged_metrics.items()}
+            self.user_id = torch.cat(self.user_id)
+            self.user_hist = torch.cat(self.user_hist)
+            user_hist_num = self.user_hist.bool().sum(-1).cpu()
+
+            x, y = [], {k: [] for k in epoch_rst}
+            unique_hist_num, reverse_idx = torch.unique(user_hist_num, return_inverse=True)
+            chunk_list = torch.chunk(unique_hist_num, self.chunk_size)
+            chunk_idx = 0
+            x = ['[' + str(_[0].item()) + ',' + str(_[-1].item()) +']' for _ in chunk_list]
+
+            for chunk_data in chunk_list:
+                for k, v in epoch_rst.items():
+                    rst = []
+                    for _ in chunk_data:
+                        rst.append(v[user_hist_num == _])
+                    y[k].append(torch.cat(rst).mean().item())
+
+            # for idx, hist_num in enumerate(unique_hist_num):
+            #     for k, v in epoch_rst.items():
+            #         if hist_num not in chunk_list[chunk_idx]:
+            #             chunk_idx += 1
+            #             y[k].append(v[reverse_idx == idx].mean().cpu().item())
+            #         else:
+            #             y[k][-1] += v[reverse_idx == idx].mean().cpu().item()
+
+            for k, v in y.items():
+                fig, ax = plt.subplots()
+                plt.plot(x, v)
+                plt.scatter(x, v)
+                plt.xlabel('user hist num')
+                plt.title(f'{k}')
+                wandb.log({f'{k}_Image': wandb.Image(plt)})
+                plt.close()
+
+        self.counter += 1
+        self.user_id = None
+        self.user_hist = None
+        self.logged_metrics = None
+        return
+
+    def __call__(self, model, epoch, metrics):
+        if self.monitor not in metrics:
+            raise ValueError(f"monitor {self.monitor} not in given `metrics`.")
+        if self.mode == 'max':
+            if metrics[self.monitor] >= self.best_value+self.delta:
+                self._reset_counter(model, epoch, metrics)
+                self.logger.info("{} improved. Best value: {:.4f}".format(
+                                self.monitor, metrics[self.monitor]))
+                self.save_checkpoint(epoch)
+            else:
+                self._counter += 1
+        else:
+            if metrics[self.monitor] <= self.best_value-self.delta:
+                self._reset_counter(model, epoch, metrics)
+                self.logger.info("{} improved. Best value: {:.4f}".format(
+                                self.monitor, metrics[self.monitor]))
+                self.save_checkpoint(epoch)
+            else:
+                self._counter += 1
+
+        if self._counter >= self.patience:
+            self.logger.info(f"Early stopped. Since the metric {self.monitor} "
+                             f"haven't been improved for {self._counter} epochs.")
+            self.logger.info(f"The best score of {self.monitor} is "
+                             f"{self.best_value:.4f} on epoch {self.best_ckpt['epoch']}")
+            return True
+        else:
+            return False
+        
+    def analyze(self):
+        return

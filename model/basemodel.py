@@ -98,6 +98,7 @@ class BaseModel(nn.Module):
 
     def fit(self):
         self.callback = callbacks.EarlyStopping(self, 'ndcg@20', self.config['data']['dataset'], patience=self.config['train']['early_stop_patience'])
+        self.analyzer = callbacks.Analyzer(self)
         self.logger.info('save_dir:' + self.callback.save_dir)
         self._init_model(self.dataset_list[0])
         self.logger.info(self)
@@ -260,6 +261,7 @@ class BaseModel(nn.Module):
             out = self._test_epoch_end(outputs, val_metric)
         out = {domain + '_' + k: v for k, v in out.items()}
         self.logged_metrics.update(out)
+        self.analyzer.analyze_epoch()
         return out
 
     def test_epoch_end(self, outputs, domain):
@@ -273,6 +275,7 @@ class BaseModel(nn.Module):
             out = self._test_epoch_end(outputs, test_metric)
         out = {domain + '_' + k: v for k, v in out.items()}
         self.logged_metrics.update(out)
+        self.analyzer.analyze_epoch()
         return out
     
     def _test_epoch_end(self, outputs, metrics):
@@ -311,6 +314,13 @@ class BaseModel(nn.Module):
         score, topk_items = self.topk(batch, topk, batch['user_hist'])
         label = batch[self.fiid].view(-1, 1) == topk_items
         pos_rating = batch['label'].view(-1, 1)
+
+        # analyzer
+        analyzer_rst = {f"{name}@{cutoff}": func(label, pos_rating, cutoff, mean=False) for cutoff in cutoffs for name, func in rank_m}
+        self.analyzer.record_batch(batch[self.fuid], batch['user_hist'], analyzer_rst)
+
+        return {k: v.mean() for k, v in analyzer_rst.items()}, bs
+
         return {f"{name}@{cutoff}": func(label, pos_rating, cutoff) for cutoff in cutoffs for name, func in rank_m}, bs
     
     def topk(self, batch, k, user_h=None):
