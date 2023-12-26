@@ -9,21 +9,22 @@ class SASRec2(BaseModel):
     def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
         super().__init__(config, dataset_list)
         self.position_emb = torch.nn.Embedding(self.max_seq_len * dataset_list[0].num_domains, self.embed_dim)
+        model_config = config['model']
         transformer_encoder = torch.nn.TransformerEncoderLayer(
             d_model=self.embed_dim,
-            nhead=config['head_num'],
-            dim_feedforward=config['hidden_size'],
-            dropout=config['dropout_rate'],
-            activation=config['activation'],
-            layer_norm_eps=config['layer_norm_eps'],
+            nhead=model_config['head_num'],
+            dim_feedforward=model_config['hidden_size'],
+            dropout=model_config['dropout_rate'],
+            activation=model_config['activation'],
+            layer_norm_eps=model_config['layer_norm_eps'],
             batch_first=True,
             norm_first=False
         )
         self.transformer_layer = torch.nn.TransformerEncoder(
             encoder_layer=transformer_encoder,
-            num_layers=config['layer_num'],
+            num_layers=model_config['layer_num'],
         )
-        self.dropout = torch.nn.Dropout(p=config['dropout_rate'])
+        self.dropout = torch.nn.Dropout(p=model_config['dropout_rate'])
         self.training_pooling_layer = SeqPoolingLayer(pooling_type='origin')
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
 
@@ -40,6 +41,9 @@ class SASRec2(BaseModel):
     def uniformity(x):
         x = F.normalize(x, dim=-1)
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
+
+    def get_score(self, query):
+        return query @ self.item_embedding.weight
 
     def forward(self, batch):
         seq_embs, seq_len = batch['seq_embs'], batch['seqlen']
