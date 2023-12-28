@@ -43,7 +43,6 @@ class BaseModel(nn.Module):
 
     def _init_model(self, train_data):
         self.apply(normal_initialization)
-        self.item_embedding.weight[-1].data.copy_(torch.zeros(self.embed_dim))
         self = self.to(self.device)
         self.optimizer = self._get_optimizers()
         self.loss_fn = self._get_loss_func()
