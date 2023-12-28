@@ -45,6 +45,26 @@ class SASRec2(BaseModel):
     def get_score(self, query):
         return query @ self.item_embedding.weight
 
+    def forward_eval(self, batch):
+        user_hist = batch['in_'+self.fiid]
+        positions = torch.arange(user_hist.size(1), dtype=torch.long, device=user_hist.device)
+        positions = positions.unsqueeze(0).expand_as(user_hist)
+        position_embs = self.position_emb(positions)
+        seq_embs = self.item_embedding(user_hist)
+
+        mask4padding = user_hist == 0  # BxL
+        L = user_hist.size(-1)
+        attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_hist.device), 1)
+        transformer_out = self.transformer_layer(
+            src=self.dropout(seq_embs+position_embs),
+            mask=attention_mask,
+            src_key_padding_mask=mask4padding)  # BxLxD
+
+        if self.training:
+            return self.training_pooling_layer(transformer_out, batch['seqlen'])
+        else:
+            return self.eval_pooling_layer(transformer_out, batch['seqlen'])
+
     def forward(self, batch):
         seq_embs, seq_len = batch['seq_embs'], batch['seqlen']
         positions = torch.arange(seq_embs.size(1), dtype=torch.long, device=self.device)

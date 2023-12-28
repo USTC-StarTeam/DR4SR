@@ -91,11 +91,13 @@ class BaseDataset(Dataset):
     def build(self):
         self._build()
 
-    def get_loader(self):
+    def get_loader(self, batch_size=None):
         if self.phase == 'train':
-            return DataLoader(self, self.config['train']['batch_size'], shuffle=True)
+            batch_size = self.config['train']['batch_size'] if batch_size == None else batch_size
+            return DataLoader(self, batch_size, shuffle=True)
         else:
-            return DataLoader(self, self.config['eval']['batch_size'])
+            batch_size = self.config['eval']['batch_size'] if batch_size == None else batch_size
+            return DataLoader(self, batch_size)
 
     def set_eval_domain(self, domain):
         self.eval_domain = domain
@@ -240,7 +242,7 @@ class SelectionDataset(SeparateDataset):
         user_id, user_seq, target_item, seq_len, label, domain_id = data
         N = len(user_id)
         if self.strategy == 'random':
-            selection = torch.randperm(N)[: int(N * 0.8)].tolist()
+            selection = torch.randperm(N)[: int(N * 0.5)].tolist()
         return (
             user_id[selection],
             user_seq[selection],

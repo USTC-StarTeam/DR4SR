@@ -1,0 +1,5 @@
+domain_name_list: ['ml-1m']
+user_threshold: 5
+item_threshold: 5
+max_seq_len: 400
+dataset_class: 'general'

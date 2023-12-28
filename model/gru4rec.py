@@ -23,12 +23,6 @@ class GRU4Rec(BaseModel):
         self.training_pooling_layer = SeqPoolingLayer(pooling_type='origin')
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
 
-    def _get_dataset_class():
-        if config['data']['dataset_class'] == 'condense':
-            return dataset.CondenseDataset
-        elif config['data']['dataset_class'] == 'general':
-            return dataset.SeparateDataset
-
     def forward(self, batch):
         gru4rec_out = self.query_encoder(batch)
         if self.training:

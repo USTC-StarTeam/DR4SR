@@ -1,5 +1,5 @@
 train: 
-  batch_size: 64
+  batch_size: 256
   early_stop_mode: max
   early_stop_patience: 20
   epochs: 1000
@@ -15,7 +15,7 @@ model:
   loss_fn: 'bce'
 
 eval:
-  batch_size: 256
+  batch_size: 1024
   cutoff: [20, 10]
   val_metrics: [ndcg, recall]
   test_metrics: [ndcg, recall]

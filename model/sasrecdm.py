@@ -17,11 +17,11 @@ from utils import callbacks
 
 from utils.reparam_module import ReparamModule
 
-class Student(BaseModel):
+class SASRecDM(BaseModel):
     def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
         super().__init__(config, dataset_list)
         # self.synthetic_size = int(self.num_users * 0.5)
-        self.synthetic_size = int(256 * 20)
+        self.synthetic_size = int(256 * 10)
         self.sub_model = ReparamModule(self.create_submodel())
 
     def _init_model(self, train_data):
@@ -79,6 +79,40 @@ class Student(BaseModel):
 
     def train_start(self):
         for _ in range(50):
+            # train synthetic dataset
+            self.sub_model = self.create_submodel().to(self.device)
+            self.sub_model.train()
+            self.synthetic_dataset.train()
+            self.synthetic_dataset.requires_grad_(True)
+            for outer_idx in range(50):
+                
+                x = self.synthetic_dataset.weight
+                mask = torch.zeros(self.num_items, dtype=torch.bool, device=self.device)
+                mask[0] = 1
+                x = x.masked_fill(mask.unsqueeze(0), -torch.inf)
+                item_emb = self.sub_model.item_embedding.weight
+                seq_embs, target_item = self.sampling(x, item_emb)
+
+                batch = {
+                    'seq_embs': seq_embs,
+                    self.fiid: target_item,
+                    'seqlen': self.max_seq_len * torch.ones(seq_embs.shape[0], dtype=int, device=self.device)
+                }
+
+                query_syn = self.sub_model.forward(batch)
+                batch = {
+                    'in_' + self.fiid: self.dataset_list[0].data[1],
+                    self.fiid: self.dataset_list[0].data[2],
+                    'seqlen': self.dataset_list[0].data[3]
+                }
+                query_real = self.sub_model.forward_eval(batch).detach()
+                loss = torch.sum((torch.mean(query_real, dim=0) - torch.mean(query_syn, dim=0))**2)
+                
+                self.synthetic_optimizer.zero_grad()
+                loss.backward()
+
+                self.synthetic_optimizer.step()
+
             # eval synthetic dataset
             self.sub_model = self.create_submodel().to(self.device)
             self.synthetic_dataset.requires_grad_(False)
@@ -153,75 +187,6 @@ class Student(BaseModel):
             self.training_end()
             self.callback = callbacks.EarlyStopping(self, 'ndcg@20', self.config['data']['dataset'], patience=self.config['train']['early_stop_patience'])
 
-            # train synthetic dataset
-            self.sub_model = ReparamModule(self.create_submodel().to(self.device))
-            self.sub_model.train()
-            self.synthetic_dataset.train()
-            self.synthetic_dataset.requires_grad_(True)
-            for outer_idx in range(50):
-                start_epoch = np.random.randint(0, 25)
-                starting_params = self.experts[start_epoch]
-                target_params = self.experts[start_epoch+2]
-                target_params = torch.cat([p.data.reshape(-1) for p in target_params]).to(self.device)
-                student_params = [torch.cat([p.data.reshape(-1) for p in starting_params]).to(self.device).requires_grad_(True)]
-                starting_params = torch.cat([p.data.reshape(-1) for p in starting_params]).to(self.device)
-                # target_params = self._state_dict_to_device(self.experts[-1])
-                # student_params = [self.experts[0]]
-                # starting_params = self._state_dict_to_device(self.experts[0])
-                # self.load_state_dict(self.experts[0], strict=False)
-                param_loss_list = []
-                param_dist_list = []
-                indices_chunks = []
-
-                for _ in range(15):
-                    if not indices_chunks:
-                        indices = torch.randperm(self.synthetic_dataset.weight.shape[0])
-                        indices_chunks = list(torch.split(indices, 256)) # greater than teacher
-                    these_indices = indices_chunks.pop()
-                    x = self.synthetic_dataset.weight[these_indices]
-                    mask = torch.zeros(self.num_items, dtype=torch.bool, device=self.device)
-                    mask[0] = 1
-                    x = x.masked_fill(mask.unsqueeze(0), -torch.inf)
-                    item_emb = student_params[-1][:self.num_items * self.embed_dim].reshape(self.num_items, self.embed_dim)
-                    seq_embs, target_item = self.sampling(x, item_emb)
-
-                    batch = {
-                        'seq_embs': seq_embs,
-                        self.fiid: target_item,
-                        'seqlen': self.max_seq_len * torch.ones(seq_embs.shape[0], dtype=int, device=self.device)
-                    }
-
-                    query = self.sub_model.forward(batch, flat_param=student_params[-1])
-                    pos_score = (query * target_item).sum(-1)
-                    weight = torch.ones(query.shape[0], self.num_items, device=self.device)
-                    neg_idx = torch.multinomial(weight, self.max_seq_len, replacement=True)
-                    neg_idx = neg_idx.reshape(query.shape[0], self.max_seq_len, 1)
-                    neg_score = (query.unsqueeze(-2) * item_emb[neg_idx]).sum(-1)
-                    loss_value = self.loss_fn(pos_score, neg_score)
-
-                    grad = torch.autograd.grad(loss_value, student_params[-1], create_graph=True)[0]
-                    student_params.append(student_params[-1] - 0.001 * grad)
-
-                param_loss = torch.tensor(0.0).to(self.device)
-                param_dist = torch.tensor(0.0).to(self.device)
-                
-                param_loss += torch.nn.functional.mse_loss(student_params[-1], target_params, reduction="sum")
-                param_dist += torch.nn.functional.mse_loss(starting_params, target_params, reduction="sum")
-
-                num_params = sum([np.prod(p.size()) for _, p in (self._remove_meta_parameters(self.state_dict())).items()])
-                param_loss /= num_params
-                param_dist /= num_params
-
-                param_loss /= param_dist
-
-                grand_loss = param_loss
-                
-                self.synthetic_optimizer.zero_grad()
-                grand_loss.backward()
-
-                self.synthetic_optimizer.step()
-                for _ in student_params:
-                    del _
 
     def forward(self, batch):
         # for eval
