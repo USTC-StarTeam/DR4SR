@@ -64,6 +64,8 @@ class BaseModel(nn.Module):
             return SeparateDataset
         elif config['data']['dataset_class'] == 'selection':
             return SelectionDataset
+        elif config['data']['dataset_class'] == 'split':
+            return SplitDataset
 
     def _get_optimizers(self):
         opt_name = self.config['train']['optimizer']

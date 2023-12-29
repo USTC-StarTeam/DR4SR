@@ -233,6 +233,49 @@ class CondenseDataset(SeparateDataset):
                 self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
             }
 
+class SplitDataset(SeparateDataset):
+    def _condense_sequences(self, data):
+        user_id, user_seq, target_item, seq_len, label, domain_id = data
+        user_id, user_seq, target_item, seq_len, label, domain_id = user_id.tolist(), user_seq.tolist(), target_item.tolist(), seq_len.tolist(), label.tolist(), domain_id.tolist()
+        merged_data = [[], [], [], [], [], []]
+        for idx in range(len(user_seq)):
+            if seq_len[idx] > self.max_seq_len // 2: # split into half
+                cur_len = seq_len[idx] // 2
+                merged_data[0].append(user_id[idx]) # useless
+                merged_data[1].append(user_seq[idx][:cur_len] + [0] * (self.max_seq_len - cur_len))
+                merged_data[2].append(target_item[idx][:cur_len] + [0] * (self.max_seq_len - cur_len))
+                merged_data[3].append(cur_len)
+                merged_data[4].append(label[idx]) # useless
+                merged_data[5].append(domain_id[idx]) # useless
+
+                merged_data[0].append(user_id[idx]) # useless
+                merged_data[1].append(user_seq[idx][cur_len:] + [0] * cur_len)
+                merged_data[2].append(target_item[idx][cur_len:] + [0] * cur_len)
+                merged_data[3].append(seq_len[idx] - cur_len)
+                merged_data[4].append(label[idx]) # useless
+                merged_data[5].append(domain_id[idx]) # useless
+            else:
+                merged_data[0].append(user_id[idx]) # useless
+                merged_data[1].append(user_seq[idx])
+                merged_data[2].append(target_item[idx])
+                merged_data[3].append(seq_len[idx])
+                merged_data[4].append(label[idx]) # useless
+                merged_data[5].append(domain_id[idx]) # useless
+        merged_data = [torch.tensor(_, device=self.device) for _ in merged_data]
+        return merged_data
+
+    def _build(self):
+        if self.phase == 'train':
+            self.data = []
+            for _ in self._data:
+                self.data += _
+            self.data = self.unpack(self.data)
+            self.data = tuple(self._condense_sequences(self.data))
+        else:
+            self.data = {
+                self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
+            }
+
 class SelectionDataset(SeparateDataset):
     def __init__(self, config, phase='train') -> None:
         super().__init__(config, phase)
