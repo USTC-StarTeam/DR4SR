@@ -3,12 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from model.basemodel import BaseModel
 from module.layers import SeqPoolingLayer
+from module import data_augmentation
 from data import dataset
+from copy import deepcopy
 
 class SASRecQueryEncoder(torch.nn.Module):
     def __init__(
             self, fiid, embed_dim, max_seq_len, n_head, hidden_size, dropout, activation, layer_norm_eps, n_layer, item_encoder,
-            bidirectional=False, training_pooling_type='origin', eval_pooling_type='last') -> None:
+            bidirectional=False, training_pooling_type='last', eval_pooling_type='last') -> None:
         super().__init__()
         self.fiid = fiid
         self.item_encoder = item_encoder
@@ -51,11 +53,13 @@ class SASRecQueryEncoder(torch.nn.Module):
             src=self.dropout(seq_embs+position_embs),
             mask=attention_mask,
             src_key_padding_mask=mask4padding)  # BxLxD
-
-        if self.training:
-            return self.training_pooling_layer(transformer_out, batch['seqlen'])
+        if not need_pooling:
+            return transformer_out
         else:
-            return self.eval_pooling_layer(transformer_out, batch['seqlen'])
+            if self.training:
+                return self.training_pooling_layer(transformer_out, batch['seqlen'])
+            else:
+                return self.eval_pooling_layer(transformer_out, batch['seqlen'])
 
 class SASRec(BaseModel):
     def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
@@ -73,25 +77,18 @@ class SASRec(BaseModel):
             self.item_embedding,
         )
 
-    @staticmethod
-    def alignment(x, y):
-        x, y = F.normalize(x, dim=-1), F.normalize(y, dim=-1)
-        return (x - y).norm(p=2, dim=1).pow(2).mean()
+    def _init_model(self, train_data):
+        super()._init_model(train_data)
+        self.augmentation_model = data_augmentation.Cluster(self.config['model'], train_data)
+        self.kmeans_train_loader = deepcopy(self.dataset_list[0]).get_loader(shuffle=False)
 
-    @staticmethod
-    def uniformity(x):
-        x = F.normalize(x, dim=-1)
-        return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
+    def current_epoch_trainloaders(self, nepoch):
+        return super().current_epoch_trainloaders(nepoch)
 
     def forward(self, batch):
         return self.query_encoder(batch)
 
-    # def training_step(self, batch):
-    #     user_embed = self.forward(batch).flatten(1)
-    #     item_embed = self.item_embedding.weight[batch[self.fiid]].flatten(1)
-        
-    #     align = self.alignment(user_embed, item_embed)
-    #     uniform = (self.uniformity(user_embed) + self.uniformity(item_embed)) / 2
-    #     loss_value = align + 3 * uniform
-
-    #     return loss_value
+    def training_epoch(self, nepoch):
+        selected_data_index = self.augmentation_model.train_kmeans(self.query_encoder, self.kmeans_train_loader, self.device)
+        self.dataset_list[0].set_data_index(selected_data_index)
+        return super().training_epoch(nepoch)

@@ -53,8 +53,11 @@ class BaseModel(nn.Module):
         _idx = torch.arange(user_seq.size(0), device=self.device).view(-1, 1).expand_as(user_seq)
         weight[_idx, user_seq] = 0.0
         weight[:, 0] = 0 # padding
-        neg_idx = torch.multinomial(weight, self.config['train']['num_neg'] * self.max_seq_len, replacement=True)
-        neg_idx = neg_idx.reshape(user_seq.shape[0], self.max_seq_len, self.config['train']['num_neg'])
+        if len(batch[self.fiid]) == 2:
+            neg_idx = torch.multinomial(weight, self.max_seq_len, replacement=True)
+        else:
+            neg_idx = torch.multinomial(weight, 1, replacement=True)
+        neg_idx = neg_idx.reshape_as(batch[self.fiid])
         return neg_idx
 
     def _get_dataset_class(config):
@@ -66,6 +69,8 @@ class BaseModel(nn.Module):
             return SelectionDataset
         elif config['data']['dataset_class'] == 'split':
             return SplitDataset
+        elif config['data']['dataset_class'] == 'seq':
+            return SeqDataset
 
     def _get_optimizers(self):
         opt_name = self.config['train']['optimizer']
@@ -195,7 +200,7 @@ class BaseModel(nn.Module):
     def training_step(self, batch):
         query = self.forward(batch)
         pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
-        neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
+        neg_score = (query * self.item_embedding.weight[batch['neg_item']]).sum(-1)
         pos_score[batch[self.fiid] == 0] = -torch.inf # padding
 
         loss_value = self.loss_fn(pos_score, neg_score)

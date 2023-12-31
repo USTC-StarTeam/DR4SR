@@ -603,6 +603,39 @@ class CL4SRecAugmentation(torch.nn.Module):
         output_dict['cl_loss'] = cl_loss
         return output_dict
 
+class Cluster(torch.nn.Module):
+    
+    def __init__(self, config, train_data) -> None:
+        super().__init__()
+        self.config = config
+        self.fiid = train_data.fiid
+        self.cluster = faiss.Kmeans(d=self.config['embed_dim'], k=256, gpu=False)
+
+        self.centroids = None
+
+    @torch.no_grad()
+    def train_kmeans(self, query_encoder, trainloader, device):
+        # intentions clustering
+        kmeans_training_data = []
+        for batch_idx, batch in enumerate(trainloader):
+            seq_out = query_encoder(batch, need_pooling=False)
+            seq_out = recfn.seq_pooling_function(seq_out, batch['seqlen'], pooling_type='mean')
+            kmeans_training_data.append(seq_out) # [B, D]
+
+        kmeans_training_data = torch.cat(kmeans_training_data, dim=0)
+        self.cluster.train(kmeans_training_data.cpu().numpy())
+        self.centroids = torch.from_numpy(self.cluster.centroids).to(device)
+        cluster_assignment = torch.tensor(self.cluster.assign(kmeans_training_data.cpu().numpy())[1])
+        _, cluster_count = torch.unique(cluster_assignment, return_counts=True)
+        weight = 1 / cluster_count
+        N = len(trainloader.dataset)
+        from torch.distributions import Bernoulli
+        weight = 1 / cluster_count
+        sample_weight = torch.clamp_max(weight[cluster_assignment] * (N / 128), max=1)
+        mask = Bernoulli(sample_weight).sample().bool()
+        return trainloader.dataset.data_index[mask]
+
+
 class ICLRecAugmentation(torch.nn.Module):
 
     def __init__(self, config, train_data) -> None:

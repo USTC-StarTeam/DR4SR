@@ -30,10 +30,11 @@ class BaseDataset(Dataset):
         self.domain_item_mapping = self.get_domain_item_mapping()
 
     def __len__(self):
+        return len(self.data_index)
         if self.phase == 'train':
-            return len(self.data[0]) # self.data[0] is the user_id list
+            return len(self.data_index) # self.data[0] is the user_id list
         else:
-            return len(self.data[self.eval_domain][0])
+            return len(self.data_index)
     
     def __getitem__(self, idx):
         raise NotImplementedError
@@ -82,7 +83,11 @@ class BaseDataset(Dataset):
         seq_len = torch.tensor([_[3] for _ in to_be_unpacked], device=self.device)
         label = torch.tensor([_[4] for _ in to_be_unpacked], device=self.device)
         domain_id = torch.tensor([_[5] for _ in to_be_unpacked], device=self.device)
-        return user_id, user_seq, target_item, seq_len, label, domain_id
+        if self.phase != 'train':
+            user_hist = pad_sequence([torch.tensor(_[6], device=self.device) for _ in to_be_unpacked], batch_first=True, padding_value=0)
+            return user_id, user_seq, target_item, seq_len, label, domain_id, user_hist
+        else:
+            return user_id, user_seq, target_item, seq_len, label, domain_id
     
     def _build(self):
         self.data = None
@@ -90,17 +95,21 @@ class BaseDataset(Dataset):
     
     def build(self):
         self._build()
+        self.data_index = torch.arange(len(self._data[0]))
 
-    def get_loader(self, batch_size=None):
+    def get_loader(self, batch_size=None, shuffle=True):
         if self.phase == 'train':
             batch_size = self.config['train']['batch_size'] if batch_size == None else batch_size
-            return DataLoader(self, batch_size, shuffle=True)
+            return DataLoader(self, batch_size, shuffle=shuffle)
         else:
             batch_size = self.config['eval']['batch_size'] if batch_size == None else batch_size
             return DataLoader(self, batch_size)
 
     def set_eval_domain(self, domain):
         self.eval_domain = domain
+
+    def set_data_index(self, data_index):
+        self.data_index = data_index
 
 class SeparateDataset(BaseDataset):
     """Simply put sequences in each domain togather.
@@ -133,14 +142,14 @@ class SeparateDataset(BaseDataset):
         else:
             data = self.data[self.eval_domain]
         batch = {}
-        batch[self.fuid] = data[0][idx]
-        batch['in_' + self.fiid] = data[1][idx]
-        batch[self.fiid] = data[2][idx]
-        batch['seqlen'] = data[3][idx]
-        batch['label'] = data[4][idx]
-        batch['domain_id'] = data[5][idx]
+        batch[self.fuid] = data[0][self.data_index][idx]
+        batch['in_' + self.fiid] = data[1][self.data_index][idx]
+        batch[self.fiid] = data[2][self.data_index][idx]
+        batch['seqlen'] = data[3][self.data_index][idx]
+        batch['label'] = data[4][self.data_index][idx]
+        batch['domain_id'] = data[5][self.data_index][idx]
         if self.phase != 'train':
-            batch['user_hist'] = batch['in_' + self.fiid]
+            batch['user_hist'] = data[6][self.data_index][idx]
         return batch
 
 class MixDataset(BaseDataset):
@@ -240,7 +249,7 @@ class SplitDataset(SeparateDataset):
         merged_data = [[], [], [], [], [], []]
         for idx in range(len(user_seq)):
             if seq_len[idx] > self.max_seq_len // 2: # split into half
-                cur_len = seq_len[idx] // 2
+                cur_len = random.randint(5, seq_len[idx] - 5)
                 merged_data[0].append(user_id[idx]) # useless
                 merged_data[1].append(user_seq[idx][:cur_len] + [0] * (self.max_seq_len - cur_len))
                 merged_data[2].append(target_item[idx][:cur_len] + [0] * (self.max_seq_len - cur_len))
