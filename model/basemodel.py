@@ -53,7 +53,7 @@ class BaseModel(nn.Module):
         _idx = torch.arange(user_seq.size(0), device=self.device).view(-1, 1).expand_as(user_seq)
         weight[_idx, user_seq] = 0.0
         weight[:, 0] = 0 # padding
-        if len(batch[self.fiid]) == 2:
+        if len(batch[self.fiid].shape) == 2:
             neg_idx = torch.multinomial(weight, self.max_seq_len, replacement=True)
         else:
             neg_idx = torch.multinomial(weight, 1, replacement=True)
@@ -69,8 +69,10 @@ class BaseModel(nn.Module):
             return SelectionDataset
         elif config['data']['dataset_class'] == 'split':
             return SplitDataset
-        elif config['data']['dataset_class'] == 'seq':
-            return SeqDataset
+        elif config['data']['dataset_class'] == 'cluster':
+            return ClusterDataset
+        else:
+            raise NotImplementedError
 
     def _get_optimizers(self):
         opt_name = self.config['train']['optimizer']

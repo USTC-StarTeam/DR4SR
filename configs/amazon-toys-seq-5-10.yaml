@@ -2,4 +2,4 @@ domain_name_list: ['toy']
 user_threshold: 5
 item_threshold: 5
 max_seq_len: 10
-dataset_class: 'general'
+dataset_class: 'condense'

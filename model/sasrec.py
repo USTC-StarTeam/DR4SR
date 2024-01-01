@@ -10,7 +10,7 @@ from copy import deepcopy
 class SASRecQueryEncoder(torch.nn.Module):
     def __init__(
             self, fiid, embed_dim, max_seq_len, n_head, hidden_size, dropout, activation, layer_norm_eps, n_layer, item_encoder,
-            bidirectional=False, training_pooling_type='last', eval_pooling_type='last') -> None:
+            bidirectional=False, training_pooling_type='origin', eval_pooling_type='last') -> None:
         super().__init__()
         self.fiid = fiid
         self.item_encoder = item_encoder
@@ -89,6 +89,8 @@ class SASRec(BaseModel):
         return self.query_encoder(batch)
 
     def training_epoch(self, nepoch):
-        selected_data_index = self.augmentation_model.train_kmeans(self.query_encoder, self.kmeans_train_loader, self.device)
-        self.dataset_list[0].set_data_index(selected_data_index)
+        if isinstance(self.dataset_list[0], dataset.ClusterDataset):
+            if nepoch % 5 == 0:
+                D, I = self.augmentation_model.train_kmeans(self.query_encoder, self.kmeans_train_loader, self.device)
+                self.dataset_list[0].condense_sequences(I)
         return super().training_epoch(nepoch)

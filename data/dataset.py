@@ -30,11 +30,10 @@ class BaseDataset(Dataset):
         self.domain_item_mapping = self.get_domain_item_mapping()
 
     def __len__(self):
-        return len(self.data_index)
         if self.phase == 'train':
             return len(self.data_index) # self.data[0] is the user_id list
         else:
-            return len(self.data_index)
+            return len(self.data[self.eval_domain][0])
     
     def __getitem__(self, idx):
         raise NotImplementedError
@@ -84,7 +83,8 @@ class BaseDataset(Dataset):
         label = torch.tensor([_[4] for _ in to_be_unpacked], device=self.device)
         domain_id = torch.tensor([_[5] for _ in to_be_unpacked], device=self.device)
         if self.phase != 'train':
-            user_hist = pad_sequence([torch.tensor(_[6], device=self.device) for _ in to_be_unpacked], batch_first=True, padding_value=0)
+            user_hist = user_seq
+            # user_hist = pad_sequence([torch.tensor(_[6], device=self.device) for _ in to_be_unpacked], batch_first=True, padding_value=0)
             return user_id, user_seq, target_item, seq_len, label, domain_id, user_hist
         else:
             return user_id, user_seq, target_item, seq_len, label, domain_id
@@ -95,7 +95,11 @@ class BaseDataset(Dataset):
     
     def build(self):
         self._build()
-        self.data_index = torch.arange(len(self._data[0]))
+        if self.phase == 'train':
+            self.data_index = torch.arange(len(self._data[0]))
+            self.data = self._data
+        else:
+            self.data = self._data
 
     def get_loader(self, batch_size=None, shuffle=True):
         if self.phase == 'train':
@@ -109,7 +113,9 @@ class BaseDataset(Dataset):
         self.eval_domain = domain
 
     def set_data_index(self, data_index):
+        assert self.phase == 'train'
         self.data_index = data_index
+        self.data = [_[self.data_index] for _ in self._data]
 
 class SeparateDataset(BaseDataset):
     """Simply put sequences in each domain togather.
@@ -127,12 +133,12 @@ class SeparateDataset(BaseDataset):
 
     def _build(self,):
         if self.phase == 'train':
-            self.data = []
+            data = []
             for _ in self._data:
-                self.data += _
-            self.data = self.unpack(self.data)
+                data += _
+            self._data = self.unpack(data)
         else:
-            self.data = {
+            self._data = {
                 self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
             }
 
@@ -142,14 +148,14 @@ class SeparateDataset(BaseDataset):
         else:
             data = self.data[self.eval_domain]
         batch = {}
-        batch[self.fuid] = data[0][self.data_index][idx]
-        batch['in_' + self.fiid] = data[1][self.data_index][idx]
-        batch[self.fiid] = data[2][self.data_index][idx]
-        batch['seqlen'] = data[3][self.data_index][idx]
-        batch['label'] = data[4][self.data_index][idx]
-        batch['domain_id'] = data[5][self.data_index][idx]
+        batch[self.fuid] = data[0][idx]
+        batch['in_' + self.fiid] = data[1][idx]
+        batch[self.fiid] = data[2][idx]
+        batch['seqlen'] = data[3][idx]
+        batch['label'] = data[4][idx]
+        batch['domain_id'] = data[5][idx]
         if self.phase != 'train':
-            batch['user_hist'] = data[6][self.data_index][idx]
+            batch['user_hist'] = data[6][idx]
         return batch
 
 class MixDataset(BaseDataset):
@@ -196,6 +202,38 @@ class MixDataset(BaseDataset):
         return batch
     
 class CondenseDataset(SeparateDataset):
+    # def _condense_sequences(self, data):
+    #     user_id, user_seq, target_item, seq_len, label, domain_id = data
+    #     sorted_seq_len, sorted_index = torch.sort(seq_len, descending=True)
+    #     sorted_seq_len = sorted_seq_len.tolist()
+    #     sorted_seq = user_seq[sorted_index].tolist()
+    #     sorted_target_item = target_item[sorted_index]
+    #     merged_data = [[], [], [], [], [], []]
+    #     pre_pointer, post_pointer = 0, len(user_seq) - 1
+    #     while(pre_pointer <= post_pointer):
+    #         cur_seq, cur_seq_len, cur_target_item = sorted_seq[pre_pointer], sorted_seq_len[pre_pointer], sorted_target_item[pre_pointer]
+    #         # find to to appended
+    #         while cur_seq_len <= self.max_seq_len:
+    #             post_seq_len = sorted_seq_len[post_pointer]
+    #             if (cur_seq_len + post_seq_len <= self.max_seq_len) and pre_pointer != post_pointer:
+    #                 cur_seq = sorted_seq[post_pointer][:post_seq_len] + cur_seq[:cur_seq_len]
+    #                 cur_seq_len = cur_seq_len + post_seq_len
+    #                 post_pointer -= 1
+    #             else:# Add padding and record this sequence
+    #                 cur_seq = torch.tensor(cur_seq[:cur_seq_len] + [0] * (self.max_seq_len - cur_seq_len))
+    #                 cur_seq_len = torch.tensor([cur_seq_len])
+    #                 user_id_, label_, domain_id_ = torch.tensor([0]), torch.tensor([0]), torch.zeros_like(cur_seq)
+    #                 merged_data[0].append(user_id_) # useless
+    #                 merged_data[1].append(cur_seq)
+    #                 merged_data[2].append(cur_target_item)
+    #                 merged_data[3].append(cur_seq_len)
+    #                 merged_data[4].append(label_) # useless
+    #                 merged_data[5].append(domain_id_) # useless
+    #                 pre_pointer += 1
+    #                 break
+    #     merged_data = [torch.stack(_).squeeze() for _ in merged_data]
+    #     return merged_data
+
     def _condense_sequences(self, data):
         user_id, user_seq, target_item, seq_len, label, domain_id = data
         sorted_seq_len, sorted_index = torch.sort(seq_len, descending=True)
@@ -232,13 +270,13 @@ class CondenseDataset(SeparateDataset):
 
     def _build(self):
         if self.phase == 'train':
-            self.data = []
+            data = []
             for _ in self._data:
-                self.data += _
-            self.data = self.unpack(self.data)
-            self.data = tuple(self._condense_sequences(self.data))
+                data += _
+            data = self.unpack(data)
+            self._data = self._condense_sequences(data)
         else:
-            self.data = {
+            self._data = {
                 self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
             }
 
@@ -315,3 +353,35 @@ class SelectionDataset(SeparateDataset):
             self.data = {
                 self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
             }
+
+class ClusterDataset(SeparateDataset):
+    def truncate_or_pad(self, seq_list, seqlen_list):
+        
+
+        return
+        cur_seq_len = len(seq)
+        if cur_seq_len > self.max_seq_len:
+            return seq[-self.max_seq_len:], self.max_seq_len
+        else:
+            return seq + [0] * (self.max_seq_len - cur_seq_len), cur_seq_len
+
+    def condense_sequences(self, similar_index):
+        user_id, user_seq, target_item, seq_len, label, domain_id = self._data
+        seq_list, seqlen_list = user_seq[similar_index], seq_len[similar_index]
+        seq_list = seq_list.flip(-1).flatten(-2, -1)
+
+        s_mask = seq_list != 0
+        d_mask = torch.sum(s_mask, dim=1, keepdims=True) > torch.arange(seq_list.shape[1], device=self.device)
+        new_seq_list = torch.zeros_like(seq_list, device=self.device) 
+        new_seq_list[d_mask] = seq_list[s_mask]
+        seq_list = new_seq_list[:, :self.max_seq_len]
+
+        seq_list = seq_list.flip(-1)
+        s_mask = seq_list != 0
+        d_mask = torch.sum(s_mask, dim=1, keepdims=True) > torch.arange(seq_list.shape[1], device=self.device)
+        new_seq_list = torch.zeros_like(seq_list, device=self.device) 
+        new_seq_list[d_mask] = seq_list[s_mask]
+        seq_list = new_seq_list
+        seq_len = (seq_list != 0).sum(1)
+
+        self.data = [user_id, seq_list, target_item, seq_len, label, domain_id]

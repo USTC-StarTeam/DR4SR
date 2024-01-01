@@ -8,14 +8,14 @@ train:
   learning_rate: 0.001
   weight_decay: 0
   num_neg: 1   # number of negative items to be sampled
-  seed: 2024  # random seed, usually 42 is a magic number
+  seed: 2023  # random seed, usually 42 is a magic number
 
 model: 
   embed_dim: 64
   loss_fn: 'bce'
 
 eval:
-  batch_size: 1024
+  batch_size: 2048
   cutoff: [20, 10]
   val_metrics: [ndcg, recall]
   test_metrics: [ndcg, recall]
