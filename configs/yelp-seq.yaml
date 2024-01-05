@@ -1,4 +1,4 @@
-domain_name_list: ['toy']
+domain_name_list: ['yelp']
 user_threshold: 5
 item_threshold: 5
 max_seq_len: 20

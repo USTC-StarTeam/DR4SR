@@ -127,7 +127,10 @@ class SeparateDataset(BaseDataset):
         data_list = []
         for domain_name in self.domain_name_list:
             path = os.path.join(path_prefix, self.name, domain_name)
-            data = torch.load(os.path.join(path, self.phase + '.pth'))
+            if self.phase == 'train':
+                data = torch.load(os.path.join(path, self.phase + self.config['data']['train_file'] + '.pth'))
+            else:
+                data = torch.load(os.path.join(path, self.phase + '.pth'))
             data_list.append(data)
         self._data = data_list
 

@@ -27,18 +27,36 @@ class Item_Crop(torch.nn.Module):
         # sequence: [batch_size, len]
         batch_size = sequences.size(0)
 
-        croped_sequences = []
+        croped_sequences = torch.zeros_like(sequences, device=sequences.device)
         croped_seq_lens = torch.zeros(batch_size, dtype=seq_lens.dtype, device=seq_lens.device)
         for i in range(batch_size):
             seq_len = seq_lens[i].item()
             sub_len = max(1, int(self.tao * seq_len))
             croped_seq_lens[i] = sub_len
             start_index = torch.randint(low = 0, high = seq_len - sub_len + 1, size=(1,)).item()
-            croped_sequence = sequences[i][start_index : start_index + sub_len]
-            croped_sequences.append(croped_sequence)
+            croped_sequences[i, :sub_len] = sequences[i][start_index : start_index + sub_len]
+
+        return croped_sequences, croped_seq_lens
+
+    # def forward(self, sequences, seq_lens):
+    #     # sequence: [batch_size, len]
+    #     batch_size = sequences.size(0)
+
+    #     croped_sequences = []
+    #     croped_seq_lens = torch.zeros(batch_size, dtype=seq_lens.dtype, device=seq_lens.device)
+    #     for i in range(batch_size):
+    #         seq_len = seq_lens[i].item()
+    #         if seq_len < 2:
+    #             croped_seq_lens[i] = seq_len
+    #             croped_sequences.append(sequences[i])
+    #             continue
+    #         sub_len = max(1, int(self.tao * seq_len))
+    #         croped_seq_lens[i] = sub_len
+    #         start_index = torch.randint(low = 0, high = seq_len - sub_len + 1, size=(1,)).item()
+    #         croped_sequence = sequences[i][start_index : start_index + sub_len]
+    #         croped_sequences.append(croped_sequence)
 
         return pad_sequence(croped_sequences, batch_first=True), croped_seq_lens
-
 
 class Item_Mask(torch.nn.Module):
 
@@ -54,6 +72,8 @@ class Item_Mask(torch.nn.Module):
 
         for i in range(batch_size):
             seq_len = seq_lens[i]
+            if seq_len < 2:
+                continue
             sub_len = int(self.gamma * seq_len)
             mask_idx = np.random.choice(seq_len.item(), size=sub_len, replace=False).astype(np.int64)
             copied_sequence[i][mask_idx] = self.mask_id
@@ -75,6 +95,9 @@ class Item_Reorder(torch.nn.Module):
         for i in range(batch_size):
             seq = sequences[i]
             seq_len = seq_lens[i]
+            if seq_len < 2:
+                reordered_sequences.append(seq)
+                continue
             sub_len = int(self.beta * seq_len)
             start_index = random.randint(a = 0, b = seq_len - sub_len) # [a, b]
             reordered_index = list(range(sub_len))

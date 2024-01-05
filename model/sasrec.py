@@ -10,7 +10,7 @@ from copy import deepcopy
 class SASRecQueryEncoder(torch.nn.Module):
     def __init__(
             self, fiid, embed_dim, max_seq_len, n_head, hidden_size, dropout, activation, layer_norm_eps, n_layer, item_encoder,
-            bidirectional=False, training_pooling_type='origin', eval_pooling_type='last') -> None:
+            bidirectional=False, training_pooling_type='last', eval_pooling_type='last') -> None:
         super().__init__()
         self.fiid = fiid
         self.item_encoder = item_encoder
