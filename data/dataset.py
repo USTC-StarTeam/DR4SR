@@ -28,6 +28,7 @@ class BaseDataset(Dataset):
         self._load_datasets()
         self.domain_user_mapping = self.get_domain_user_mapping()
         self.domain_item_mapping = self.get_domain_item_mapping()
+        self.eval_domain = self.domain_name_list[0]
 
     def __len__(self):
         if self.phase == 'train':

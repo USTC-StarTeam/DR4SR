@@ -101,7 +101,7 @@ class BaseModel(nn.Module):
         elif self.config['model']['loss_fn'] == 'bpr':
             return BPRLoss()
 
-    def forward(self):
+    def forward(self, batch):
         raise NotImplementedError
 
     def fit(self):
