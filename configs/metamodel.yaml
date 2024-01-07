@@ -1,0 +1,16 @@
+model:
+  sub_model: 'SASRec'
+  hidden_size: 128
+  layer_num: 2
+  head_num: 2
+  dropout_rate: 0.5
+  activation: 'gelu'
+  layer_norm_eps: 1.0e-12
+
+train:
+  interval: 100
+  meta_optimizer: adam
+  meta_learning_rate: 0.001
+  meta_weight_decay: 0
+  descent_step: 100
+  warmup_epoch: 1000
