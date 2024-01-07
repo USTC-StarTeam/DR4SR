@@ -57,7 +57,7 @@ class BaseModel(nn.Module):
             neg_idx = torch.multinomial(weight, self.max_seq_len, replacement=True)
         else:
             neg_idx = torch.multinomial(weight, 1, replacement=True)
-        neg_idx = neg_idx.reshape_as(batch[self.fiid])
+        neg_idx = neg_idx.reshape_as(batch[self.fiid]).unsqueeze(-1)
         return neg_idx
 
     def _get_dataset_class(config):
@@ -202,7 +202,7 @@ class BaseModel(nn.Module):
     def training_step(self, batch):
         query = self.forward(batch)
         pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
-        neg_score = (query * self.item_embedding.weight[batch['neg_item']]).sum(-1)
+        neg_score = (query.unsqueeze(1) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
         pos_score[batch[self.fiid] == 0] = -torch.inf # padding
 
         loss_value = self.loss_fn(pos_score, neg_score)
@@ -233,6 +233,7 @@ class BaseModel(nn.Module):
             dataloader,
             total=len(dataloader),
             ncols=75,
+            desc=f"Evaluating {nepoch:>5}",
             leave=False,
         )
         for batch in dataloader:
@@ -249,6 +250,7 @@ class BaseModel(nn.Module):
             dataloader,
             total=len(dataloader),
             ncols=75,
+            desc=f"Testing: ",
             leave=False,
         )
         for batch in dataloader:
@@ -334,11 +336,10 @@ class BaseModel(nn.Module):
     def topk(self, batch, k, user_h=None):
         query = self.forward(batch)
         more = user_h.size(1) if user_h is not None else 0
-        real_score = query @ self.item_embedding.weight[:self.num_items].T # remove extra padding
+        real_score = query @ self.item_embedding.weight.T
         domain_mask = torch.ones(1, self.num_items, dtype=torch.bool, device=self.device)
         domain_mask[:, self.domain_item_mapping[self.eval_domain]] = 0
         masked_score : torch.Tensor = real_score.masked_fill(domain_mask, -torch.inf)
-        user_h[user_h == -1] = 0 # index -1 is invalid for torch.scatter, so we just change it with the PAD id
         masked_score = torch.scatter(masked_score, 1, user_h, -torch.inf)
 
         score, topk_items = torch.topk(masked_score, k)
