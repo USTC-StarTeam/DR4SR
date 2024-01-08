@@ -99,11 +99,10 @@ class MetaModel(BaseModel):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
                 batch['neg_item'] = self._neg_sampling(batch)
                 self.sub_model.optimizer.zero_grad()
+                training_step_args = {'batch': batch}
                 if nepoch > self.config['train']['warmup_epoch']:
-                    training_step_args = {'batch': batch, 'sub_model': self.sub_model}
                     loss = self.training_step(**training_step_args)
                 else:
-                    training_step_args = {'batch': batch}
                     loss = self.sub_model.training_step(**training_step_args)
                 loss.backward()
                 self.sub_model.optimizer.step()
@@ -126,19 +125,16 @@ class MetaModel(BaseModel):
             desc=f"Meta Training {nepoch:>5}",
             leave=False,
         )
-        proxy_model = self._register_sub_model().to(self.device)
-        proxy_model._init_model(self.dataset_list[0])
-        proxy_model.load_state_dict(self.sub_model.state_dict())
         for batch_idx, batch in enumerate(loader):
             if batch_idx >= self.config['train']['descent_step']:
                 break
             batch = {k: v.to(self.device) for k, v in batch.items()}
             batch['neg_item'] = self._neg_sampling(batch)
-            training_step_args = {'batch': batch, 'sub_model': proxy_model}
+            training_step_args = {'batch': batch}
             loss = self.training_step(**training_step_args)
-            proxy_model.optimizer.zero_grad()
+            self.sub_model.optimizer.zero_grad()
             loss.backward()
-            proxy_model.optimizer.step()
+            self.sub_model.optimizer.step()
 
         try:
             batch = next(self.metaloader_iter)
@@ -147,14 +143,14 @@ class MetaModel(BaseModel):
             batch = next(self.metaloader_iter)
         batch = {k: v.to(self.device) for k, v in batch.items()}
         batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch, 'sub_model': proxy_model}
+        training_step_args = {'batch': batch}
         meta_loss = self.training_step(**training_step_args)
 
         trainloader = self.current_epoch_trainloaders(nepoch)
         batch = next(iter(trainloader))
         batch = {k: v.to(self.device) for k, v in batch.items()}
         batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch, 'sub_model': self.sub_model}
+        training_step_args = {'batch': batch}
         meta_train_loss = self.training_step(**training_step_args)
 
         hyper_grads = self.meta_optimizer.step(
@@ -171,14 +167,39 @@ class MetaModel(BaseModel):
         logits = F.softmax(logits, dim=0)
         return logits.squeeze()
 
-    def training_step(self, batch, sub_model):
+    def training_step(self, batch):
         query = self.forward(batch)
-        pos_score = (query * sub_model.item_embedding.weight[batch[self.fiid]]).sum(-1)
-        neg_score = (query * sub_model.item_embedding.weight[batch['neg_item']]).sum(-1)
+        pos_score = (query * self.sub_model.item_embedding.weight[batch[self.fiid]]).sum(-1)
+        neg_score = (query * self.sub_model.item_embedding.weight[batch['neg_item']]).sum(-1)
         pos_score[batch[self.fiid] == 0] = -torch.inf # padding
 
-        loss_value = sub_model.loss_fn(pos_score, neg_score, sum=False)
+        loss_value = self.sub_model.loss_fn(pos_score, neg_score, sum=False)
         weight = self.selection(query) * query.shape[0]
         loss_value = (loss_value * weight).sum()
 
         return loss_value
+    
+    def training_step(self, batch):
+        query = self.forward(batch)
+        pos_score = (query * self.sub_model.item_embedding.weight[batch[self.fiid]]).sum(-1)
+        neg_score = (query * self.sub_model.item_embedding.weight[batch['neg_item']]).sum(-1)
+        pos_score[batch[self.fiid] == 0] = -torch.inf # padding
+
+        loss_value = self.sub_model.loss_fn(pos_score, neg_score, sum=False)
+        weight = self.selection(query) * query.shape[0]
+        loss_value = (loss_value * weight).sum()
+
+        return loss_value
+
+
+    # def training_step(self, batch):
+    #     query = self.forward(batch)
+    #     pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
+    #     neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
+    #     pos_score[batch[self.fiid] == 0] = -torch.inf # padding
+
+    #     loss_value = self.loss_fn(pos_score, neg_score)
+
+    #     cl_output = self.augmentation_model(batch, self.query_encoder)
+    #     loss_value += self.config['model']['cl_weight'] * cl_output['cl_loss']
+    #     return loss_value
