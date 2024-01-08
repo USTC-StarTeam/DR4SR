@@ -336,7 +336,7 @@ class BaseModel(nn.Module):
     def topk(self, batch, k, user_h=None):
         query = self.forward(batch)
         more = user_h.size(1) if user_h is not None else 0
-        real_score = query @ self.item_embedding.weight.T
+        real_score = query @ self.item_embedding.weight[:self.num_items].T
         domain_mask = torch.ones(1, self.num_items, dtype=torch.bool, device=self.device)
         domain_mask[:, self.domain_item_mapping[self.eval_domain]] = 0
         masked_score : torch.Tensor = real_score.masked_fill(domain_mask, -torch.inf)
