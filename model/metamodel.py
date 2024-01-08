@@ -9,13 +9,11 @@ from copy import deepcopy
 
 from tqdm import tqdm
 from torch import optim
-from utils import get_model_class, MetaOptimizer
+from utils import get_model_class, MetaOptimizer, normal_initialization, load_config
 from collections import defaultdict
 from model.loss_func import *
 from data.dataset import *
 from typing import Dict, List, Optional, Tuple
-
-from utils.utils import xavier_normal_initialization, normal_initialization
 
 from model.basemodel import BaseModel
 
@@ -39,8 +37,11 @@ class MetaModel(BaseModel):
         self.metaloader_iter = iter(self.current_epoch_metaloaders(nepoch=0))
 
     def _register_sub_model(self) -> BaseModel:
-        sub_model_config = deepcopy(self.config)
-        sub_model_config['model']['model'] = self.config['model']['sub_model']
+        sub_model_config = {
+            'dataset': self.config['data']['dataset'],
+            'model': self.config['model']['sub_model']
+        }
+        sub_model_config = load_config(sub_model_config)
         model_class = get_model_class(sub_model_config['model'])
         return model_class(sub_model_config, self.dataset_list)
 
@@ -153,7 +154,7 @@ class MetaModel(BaseModel):
         training_step_args = {'batch': batch}
         meta_train_loss = self.training_step(**training_step_args)
 
-        hyper_grads = self.meta_optimizer.step(
+        self.meta_optimizer.step(
             val_loss=meta_loss,
             train_loss=meta_train_loss,
             aux_params = list(self.meta_module.parameters()),
@@ -180,15 +181,9 @@ class MetaModel(BaseModel):
         return loss_value
     
     def training_step(self, batch):
-        query = self.forward(batch)
-        pos_score = (query * self.sub_model.item_embedding.weight[batch[self.fiid]]).sum(-1)
-        neg_score = (query * self.sub_model.item_embedding.weight[batch['neg_item']]).sum(-1)
-        pos_score[batch[self.fiid] == 0] = -torch.inf # padding
-
-        loss_value = self.sub_model.loss_fn(pos_score, neg_score, sum=False)
+        loss_value, query = self.sub_model.training_step(batch, reduce=False, return_query=True)
         weight = self.selection(query) * query.shape[0]
         loss_value = (loss_value * weight).sum()
-
         return loss_value
 
 

@@ -47,15 +47,15 @@ class CL4SRec(SASRec):
         super()._init_model(train_data)
         self.augmentation_model = data_augmentation.CL4SRecAugmentation(self.config['model'], train_data)
 
-    def training_step(self, batch):
-        query = self.forward(batch)
-        pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
-        neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
-        pos_score[batch[self.fiid] == 0] = -torch.inf # padding
-
-        loss_value = self.loss_fn(pos_score, neg_score)
-
+    def training_step(self, batch, reduce=True, return_query=False):
+        rst = super().training_step(batch, reduce=reduce, return_query=return_query)
         cl_output = self.augmentation_model(batch, self.query_encoder)
-        loss_value += self.config['model']['cl_weight'] * cl_output['cl_loss']
-        return loss_value
+        cl_loss = self.config['model']['cl_weight'] * cl_output['cl_loss']
+        if return_query:
+            loss_value, query = rst
+            loss_value += cl_loss
+            return loss_value, query
+        else:
+            loss_value = rst + cl_loss
+            return loss_value
 

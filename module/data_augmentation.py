@@ -338,7 +338,7 @@ class InfoNCELoss(torch.nn.Module):
         self.neg_type = neg_type
 
     def forward(self, augmented_rep_i: torch.Tensor, augmented_rep_j: torch.Tensor, \
-        instance_labels=None, all_reps: Optional[torch.Tensor]=None):
+        instance_labels=None, all_reps: Optional[torch.Tensor]=None, reduce=True):
         # augmented_rep_i, augmented_rep_j : [B, D], all_reps : [N, D]
         # labels: [B]
         # negative items: 2*N - 1
@@ -370,7 +370,10 @@ class InfoNCELoss(torch.nn.Module):
 
             logits = torch.cat([sim_ij, sim_ii], dim=-1) # [B, 2 * B]
             labels = torch.arange(batch_size, dtype=torch.long, device=augmented_rep_i.device) # [B]
-            loss = F.cross_entropy(logits, labels)
+            if reduce:
+                loss = F.cross_entropy(logits, labels)
+            else:
+                loss = F.cross_entropy(logits, labels, reduction='none') / batch_size
             return loss
 
         elif self.neg_type == 'batch_single':
@@ -393,7 +396,10 @@ class InfoNCELoss(torch.nn.Module):
                 sim_ij[mask == 1] = float('-inf')
 
             labels = torch.arange(batch_size, dtype=torch.long, device=augmented_rep_i.device) # [B]
-            loss = F.cross_entropy(sim_ij, labels)
+            if reduce:
+                loss = F.cross_entropy(sim_ij, labels)
+            else:
+                loss = F.cross_entropy(sim_ij, labels, reduction='none') / batch_size
             return loss
 
         elif self.neg_type == 'all':
@@ -609,7 +615,7 @@ class CL4SRecAugmentation(torch.nn.Module):
             raise ValueError(f"augmentation type: '{self.config['augment_type']}' is invalided")
         self.InfoNCE_loss_fn = InfoNCELoss(temperature=self.config['temperature'], sim_method='inner_product', neg_type='batch_both')
 
-    def forward(self, batch, query_encoder:torch.nn.Module):
+    def forward(self, batch, query_encoder:torch.nn.Module, reduce=True):
         output_dict = {}
         seq_augmented_i, seq_augmented_i_len = self.augmentation(batch['in_' + self.fiid], batch['seqlen']) # seq: [B, L] seq_len : [B]
         seq_augmented_j, seq_augmented_j_len = self.augmentation(batch['in_' + self.fiid], batch['seqlen'])
@@ -622,7 +628,7 @@ class CL4SRecAugmentation(torch.nn.Module):
             need_pooling=False) # [B, L, D]
         seq_augmented_j_out = recfn.seq_pooling_function(seq_augmented_j_out, seq_augmented_j_len, pooling_type='mean') # [B, D]
 
-        cl_loss = self.InfoNCE_loss_fn(seq_augmented_i_out, seq_augmented_j_out)
+        cl_loss = self.InfoNCE_loss_fn(seq_augmented_i_out, seq_augmented_j_out, reduce=True)
         output_dict['cl_loss'] = cl_loss
         return output_dict
 
