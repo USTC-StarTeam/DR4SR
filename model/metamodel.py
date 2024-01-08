@@ -49,18 +49,18 @@ class MetaModel(BaseModel):
             nn.Linear(self.embed_dim, self.embed_dim),
             nn.ReLU(),
             nn.Linear(self.embed_dim, 1),
-            nn.Sigmoid()
         )
 
     def _get_meta_optimizers(self):
         opt_name = self.config['train']['meta_optimizer']
         lr = self.config['train']['meta_learning_rate']
+        weight_decay = self.config['train']['meta_weight_decay']
         params = self.meta_module.parameters()
 
         if opt_name.lower() == 'adam':
             optimizer = optim.Adam(params, lr=lr)
         elif opt_name.lower() == 'sgd':
-            optimizer = optim.SGD(params, lr=lr)
+            optimizer = optim.SGD(params, lr=lr, weight_decay=weight_decay)
         elif opt_name.lower() == 'adagrad':
             optimizer = optim.Adagrad(params, lr=lr)
         elif opt_name.lower() == 'rmsprop':
@@ -68,7 +68,7 @@ class MetaModel(BaseModel):
         elif opt_name.lower() == 'sparse_adam':
             optimizer = optim.SparseAdam(params, lr=lr)
         else:
-            optimizer = optim.Adam(params, lr=lr, weight_decay=1e-3)
+            optimizer = optim.Adam(params, lr=lr, weight_decay=2)
 
         optimizer = MetaOptimizer(optimizer, hpo_lr=1)
 
@@ -99,8 +99,12 @@ class MetaModel(BaseModel):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
                 batch['neg_item'] = self._neg_sampling(batch)
                 self.sub_model.optimizer.zero_grad()
-                training_step_args = {'batch': batch, 'sub_model': self.sub_model}
-                loss = self.training_step(**training_step_args)
+                if nepoch > self.config['train']['warmup_epoch']:
+                    training_step_args = {'batch': batch, 'sub_model': self.sub_model}
+                    loss = self.training_step(**training_step_args)
+                else:
+                    training_step_args = {'batch': batch}
+                    loss = self.sub_model.training_step(**training_step_args)
                 loss.backward()
                 self.sub_model.optimizer.step()
                 outputs.append({f"loss_{loader_idx}": loss.detach()})
@@ -139,7 +143,7 @@ class MetaModel(BaseModel):
         try:
             batch = next(self.metaloader_iter)
         except StopIteration:
-            self.metaloader_iter = iter(self.current_epoch_metaloaders())
+            self.metaloader_iter = iter(self.current_epoch_metaloaders(nepoch))
             batch = next(self.metaloader_iter)
         batch = {k: v.to(self.device) for k, v in batch.items()}
         batch['neg_item'] = self._neg_sampling(batch)
@@ -164,17 +168,17 @@ class MetaModel(BaseModel):
 
     def selection(self, query):
         logits = self.meta_module(query)
-        return logits
+        logits = F.softmax(logits, dim=0)
+        return logits.squeeze()
 
     def training_step(self, batch, sub_model):
         query = self.forward(batch)
-        pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
-        neg_score = (query * self.item_embedding.weight[batch['neg_item']]).sum(-1)
+        pos_score = (query * sub_model.item_embedding.weight[batch[self.fiid]]).sum(-1)
+        neg_score = (query * sub_model.item_embedding.weight[batch['neg_item']]).sum(-1)
         pos_score[batch[self.fiid] == 0] = -torch.inf # padding
 
         loss_value = sub_model.loss_fn(pos_score, neg_score, sum=False)
-        weight = self.selection(query).squeeze()
-        loss_value = loss_value.sum() * 0.5
-        # loss_value = (loss_value * weight).sum()
+        weight = self.selection(query) * query.shape[0]
+        loss_value = (loss_value * weight).sum()
 
         return loss_value

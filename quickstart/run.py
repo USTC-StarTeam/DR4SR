@@ -21,6 +21,7 @@ def run(config: dict):
     logger.info('PID of this process: {}'.format(os.getpid()))
 
     dataset_list = prepare_datasets(config)
+    logger.info(config)
     logger.info(dataset_list[0])
 
     model = prepare_model(config, dataset_list)

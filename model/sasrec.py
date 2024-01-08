@@ -87,10 +87,3 @@ class SASRec(BaseModel):
 
     def forward(self, batch):
         return self.query_encoder(batch)
-
-    def training_epoch(self, nepoch):
-        if isinstance(self.dataset_list[0], dataset.ClusterDataset):
-            if nepoch % 5 == 0:
-                D, I = self.augmentation_model.train_kmeans(self.query_encoder, self.kmeans_train_loader, self.device)
-                self.dataset_list[0].condense_sequences(I)
-        return super().training_epoch(nepoch)

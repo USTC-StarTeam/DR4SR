@@ -10,7 +10,6 @@ if __name__ == '__main__':
     config = vars(parser.parse_args())
 
     config = load_config(config)
-    pprint.pprint(config)
 
     setup_environment(config['train'])
 
