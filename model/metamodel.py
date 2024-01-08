@@ -42,6 +42,7 @@ class MetaModel(BaseModel):
             'model': self.config['model']['sub_model']
         }
         sub_model_config = load_config(sub_model_config)
+        sub_model_config['train']['device'] = 0
         model_class = get_model_class(sub_model_config['model'])
         return model_class(sub_model_config, self.dataset_list)
 
@@ -180,21 +181,11 @@ class MetaModel(BaseModel):
 
         return loss_value
     
-    def training_step(self, batch):
+    def training_step(self, batch, reduce=True, return_query=True):
         loss_value, query = self.sub_model.training_step(batch, reduce=False, return_query=True)
         weight = self.selection(query) * query.shape[0]
         loss_value = (loss_value * weight).sum()
         return loss_value
-
-
-    # def training_step(self, batch):
-    #     query = self.forward(batch)
-    #     pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
-    #     neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
-    #     pos_score[batch[self.fiid] == 0] = -torch.inf # padding
-
-    #     loss_value = self.loss_fn(pos_score, neg_score)
-
-    #     cl_output = self.augmentation_model(batch, self.query_encoder)
-    #     loss_value += self.config['model']['cl_weight'] * cl_output['cl_loss']
-    #     return loss_value
+    
+    def evaluate(self) -> Dict:
+        return super().evaluate()

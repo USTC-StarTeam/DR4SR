@@ -1,5 +1,5 @@
 model:
-  sub_model: 'CL4SRec'
+  sub_model: 'SASRec'
   hidden_size: 128
   layer_num: 2
   head_num: 2
@@ -8,9 +8,9 @@ model:
   layer_norm_eps: 1.0e-12
 
 train:
-  interval: 30
+  interval: 50
   meta_optimizer: sgd
   meta_learning_rate: 0.001
-  meta_weight_decay: 2
-  descent_step: 30
-  warmup_epoch: 10
+  meta_weight_decay: 1
+  descent_step: 50
+  warmup_epoch: -1

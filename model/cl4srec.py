@@ -49,7 +49,7 @@ class CL4SRec(SASRec):
 
     def training_step(self, batch, reduce=True, return_query=False):
         rst = super().training_step(batch, reduce=reduce, return_query=return_query)
-        cl_output = self.augmentation_model(batch, self.query_encoder)
+        cl_output = self.augmentation_model(batch, self.query_encoder, reduce=reduce)
         cl_loss = self.config['model']['cl_weight'] * cl_output['cl_loss']
         if return_query:
             loss_value, query = rst

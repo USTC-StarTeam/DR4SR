@@ -628,7 +628,7 @@ class CL4SRecAugmentation(torch.nn.Module):
             need_pooling=False) # [B, L, D]
         seq_augmented_j_out = recfn.seq_pooling_function(seq_augmented_j_out, seq_augmented_j_len, pooling_type='mean') # [B, D]
 
-        cl_loss = self.InfoNCE_loss_fn(seq_augmented_i_out, seq_augmented_j_out, reduce=True)
+        cl_loss = self.InfoNCE_loss_fn(seq_augmented_i_out, seq_augmented_j_out, reduce=reduce)
         output_dict['cl_loss'] = cl_loss
         return output_dict
 
