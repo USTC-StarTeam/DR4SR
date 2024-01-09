@@ -158,6 +158,7 @@ class SeparateDataset(BaseDataset):
         batch['seqlen'] = data[3][idx]
         batch['label'] = data[4][idx]
         batch['domain_id'] = data[5][idx]
+        batch['index'] = idx
         if self.phase != 'train':
             batch['user_hist'] = data[6][idx]
         return batch
