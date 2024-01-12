@@ -49,8 +49,12 @@ class SASRecQueryEncoder(torch.nn.Module):
             attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_hist.device), 1)
         else:
             attention_mask = torch.zeros((L, L), dtype=torch.bool, device=user_hist.device)
+        try:
+            transformer_input = batch['input_weight'].unsqueeze(-1) * (seq_embs + position_embs)
+        except:
+            transformer_input = seq_embs + position_embs
         transformer_out = self.transformer_layer(
-            src=self.dropout(seq_embs+position_embs),
+            src=self.dropout(transformer_input),
             mask=attention_mask,
             src_key_padding_mask=mask4padding)  # BxLxD
         if not need_pooling:
@@ -85,5 +89,5 @@ class SASRec(BaseModel):
     def current_epoch_trainloaders(self, nepoch):
         return super().current_epoch_trainloaders(nepoch)
 
-    def forward(self, batch):
-        return self.query_encoder(batch)
+    def forward(self, batch, need_pooling=True):
+        return self.query_encoder(batch, need_pooling)

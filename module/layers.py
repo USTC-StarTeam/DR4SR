@@ -131,3 +131,102 @@ class GRULayer(torch.nn.Module):
             return out, hidden
         else:
             return out
+
+def get_act(activation: str, dim=None):
+    if activation == None or isinstance(activation, torch.nn.Module):
+        return activation
+    elif type(activation) == str:
+        if activation.lower() == 'relu':
+            return torch.nn.ReLU()
+        elif activation.lower() == 'sigmoid':
+            return torch.nn.Sigmoid()
+        elif activation.lower() == 'tanh':
+            return torch.nn.Tanh()
+        elif activation.lower() == 'leakyrelu':
+            return torch.nn.LeakyReLU()
+        elif activation.lower() == 'identity':
+            return lambda x: x
+        elif activation.lower() == 'gelu':
+            return torch.nn.GELU()
+        elif activation.lower() == 'leakyrelu':
+            return torch.nn.LeakyReLU()
+        else:
+            raise ValueError(
+                f'activation function type "{activation}"  is not supported, check spelling or pass in a instance of torch.nn.Module.')
+    else:
+        raise ValueError(
+            '"activation_func" must be a str or a instance of torch.nn.Module. ')
+
+class MLPModule(torch.nn.Module):
+    """
+    MLPModule
+    Gets a MLP easily and quickly.
+
+    Args:
+        mlp_layers(list): the dimensions of every layer in the MLP.
+        activation_func(torch.nn.Module,str,None): the activation function in each layer.
+        dropout(float): the probability to be set in dropout module. Default: ``0.0``.
+        bias(bool): whether to add batch normalization between layers. Default: ``False``.
+        last_activation(bool): whether to add activation in the last layer. Default: ``True``.
+        last_bn(bool): whether to add batch normalization in the last layer. Default: ``True``.
+
+    Examples:
+    >>> MLP = MLPModule([64, 64, 64], 'ReLU', 0.2)
+    >>> MLP.model
+    Sequential(
+        (0): Dropout(p=0.2, inplace=False)
+        (1): Linear(in_features=64, out_features=64, bias=True)
+        (2): ReLU()
+        (3): Dropout(p=0.2, inplace=False)
+        (4): Linear(in_features=64, out_features=64, bias=True)
+        (5): ReLU()
+    )
+    >>> MLP.add_modules(torch.nn.Linear(64, 10, True), torch.nn.ReLU())
+    >>> MLP.model
+    Sequential(
+        (0): Dropout(p=0.2, inplace=False)
+        (1): Linear(in_features=64, out_features=64, bias=True)
+        (2): ReLU()
+        (3): Dropout(p=0.2, inplace=False)
+        (4): Linear(in_features=64, out_features=64, bias=True)
+        (5): ReLU()
+        (6): Linear(in_features=64, out_features=10, bias=True)
+        (7): ReLU()
+    )
+    """
+
+    def __init__(self, mlp_layers, activation_func='ReLU', dropout=0.0, bias=True, batch_norm=False, last_activation=True, last_bn=True):
+        super().__init__()
+        self.mlp_layers = mlp_layers
+        self.batch_norm = batch_norm
+        self.bias = bias
+        self.dropout = dropout
+        self.activation_func = activation_func
+        self.model = []
+        last_bn = self.batch_norm and last_bn
+        for idx, layer in enumerate((zip(self.mlp_layers[: -1], self.mlp_layers[1:]))):
+            self.model.append(torch.nn.Dropout(dropout))
+            self.model.append(torch.nn.Linear(*layer, bias=bias))
+            if (idx == len(mlp_layers)-2 and last_bn) or (idx < len(mlp_layers)-2 and batch_norm):
+                self.model.append(torch.nn.BatchNorm1d(layer[-1]))
+            if ( (idx == len(mlp_layers)-2 and last_activation and activation_func is not None)
+                or (idx < len(mlp_layers)-2 and activation_func is not None) ):
+                activation = get_act(activation_func, dim=layer[-1])
+                self.model.append(activation)
+        self.model = torch.nn.Sequential(*self.model)
+
+    def add_modules(self, *args):
+        """
+        Adds modules into the MLP model after obtaining the instance.
+
+        Args:
+            args(variadic argument): the modules to be added into MLP model.
+        """
+        for block in args:
+            assert isinstance(block, torch.nn.Module)
+
+        for block in args:
+            self.model.add_module(str(len(self.model._modules)), block)
+
+    def forward(self, input):
+        return self.model(input)

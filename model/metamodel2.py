@@ -14,15 +14,18 @@ from collections import defaultdict
 from model.loss_func import *
 from data.dataset import *
 from typing import Dict, List, Optional, Tuple
+from module.layers import MLPModule
 
 from model.basemodel import BaseModel
 
-class MetaModel(BaseModel):
+class MetaModel2(BaseModel):
     def __init__(self, config: Dict, dataset_list: List[BaseDataset]) -> None:
         super().__init__(config, dataset_list)
         self.interval = config['train']['interval']
         self.step_counter = 0
         self.item_embedding = None # MetaModel is just a trainer without item embedding
+        self.tau = 10
+        self.annealing_factor = 0.9999
 
     def _init_model(self, train_data):
         self.sub_model : BaseModel = self._register_sub_model()
@@ -47,10 +50,13 @@ class MetaModel(BaseModel):
         return model_class(sub_model_config, self.dataset_list)
 
     def _register_meta_modules(self) -> nn.Module:
-        return nn.Sequential(
-            nn.Linear(self.embed_dim, self.embed_dim),
-            nn.ReLU(),
-            nn.Linear(self.embed_dim, 1),
+        return MLPModule([
+                self.embed_dim,
+                self.embed_dim,
+                1,
+            ],
+            dropout=0.5,
+            activation_func='leakyrelu',
         )
 
     def _get_meta_optimizers(self):
@@ -167,21 +173,20 @@ class MetaModel(BaseModel):
             entropy = None
         )
 
-    def selection(self, query):
-        logits = self.meta_module(query)
-        # logits = F.softmax(logits, dim=0)
-        logits = torch.sigmoid(logits)
-        return logits.squeeze()
-    
+    def selection(self, query, seq_len):
+        logits = self.meta_module(query).squeeze()
+        mask = torch.arange(query.shape[1], device=self.device).unsqueeze(0) >= seq_len.unsqueeze(-1)
+        logits = logits.masked_fill(mask, -torch.inf)
+        out = self.training * F.gumbel_softmax(logits, dim=-1, tau=self.tau) + \
+            (1 - self.training) * F.softmax(logits, dim=-1)
+        out = torch.clamp(out * seq_len.unsqueeze(-1), min=0, max=1)
+        self.tau = max(self.tau * self.annealing_factor, 1)
+        return out
+
     def training_step(self, batch, sub_model=None, reduce=True, return_query=True):
         if sub_model is None:
             sub_model = self.sub_model
-        loss_value = sub_model.training_step(batch, reduce=False, return_query=False)
-        query = self.sub_model.forward(batch)
-        weight = self.selection(query)
-        # weight = self.selection(query) * query.shape[0]
-        loss_value = (loss_value * weight).sum()
+        query = self.sub_model.forward(batch, need_pooling=False)
+        batch['input_weight'] = self.selection(query, batch['seqlen'])
+        loss_value = sub_model.training_step(batch, reduce=True, return_query=False)
         return loss_value
-    
-    def evaluate(self) -> Dict:
-        return super().evaluate()
