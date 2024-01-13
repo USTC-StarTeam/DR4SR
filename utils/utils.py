@@ -140,7 +140,7 @@ class Hypergrad:
         self.learning_rate = learning_rate
         self.truncate_iter = truncate_iter
 
-    def grad(self, loss_val, loss_train, aux_params, params, entropy=None):
+    def grad(self, loss_val, loss_train, aux_params, params):
         """Calculates the gradients w.r.t \phi dloss_aux/dphi, see paper for details
 
         :param loss_val:
@@ -165,14 +165,6 @@ class Hypergrad:
 
         v2 = self._approx_inverse_hvp(dloss_val_dparams, dloss_train_dparams, params)
 
-
-        if entropy is not None:
-            v_e = torch.autograd.grad(
-            entropy,
-            aux_params,
-            allow_unused=True,
-            retain_graph = True
-            )
         v3 = torch.autograd.grad(
             dloss_train_dparams,
             aux_params,
@@ -180,13 +172,8 @@ class Hypergrad:
             allow_unused=True
         )
 
-        if entropy is None:
         # note we omit dL_v/d_lambda since it is zero in our settings
-            return list(-g for g in v3)
-        else:
-            p1 = [curr_p - curr_v for (curr_p, curr_v) in zip(v_e, v3)]
-            return list(pp for pp in p1)
-
+        return list(-g for g in v3)
 
     def _approx_inverse_hvp(self, dloss_val_dparams, dloss_train_dparams, params):
         """
@@ -229,7 +216,7 @@ class MetaOptimizer:
         self.hypergrad = Hypergrad(learning_rate=hpo_lr, truncate_iter=truncate_iter)
         self.max_grad_norm = max_grad_norm
 
-    def step(self, train_loss, val_loss, parameters, aux_params, return_grads=False, entropy=None):
+    def step(self, train_loss, val_loss, parameters, aux_params, return_grads=False):
         """
 
         :param train_loss: train loader
@@ -247,8 +234,7 @@ class MetaOptimizer:
             loss_val=val_loss,
             loss_train=train_loss,
             aux_params=aux_params,
-            params=parameters,
-            entropy=entropy
+            params=parameters
         )
 
         for p, g in zip(aux_params, hyper_gards):

@@ -18,7 +18,7 @@ from module.layers import MLPModule
 
 from model.basemodel import BaseModel
 
-class MetaModel2(BaseModel):
+class MetaModel3(BaseModel):
     def __init__(self, config: Dict, dataset_list: List[BaseDataset]) -> None:
         super().__init__(config, dataset_list)
         self.interval = config['train']['interval']
@@ -68,7 +68,7 @@ class MetaModel2(BaseModel):
         if opt_name.lower() == 'adam':
             optimizer = optim.Adam(params, lr=lr)
         elif opt_name.lower() == 'sgd':
-            optimizer = optim.SGD(params, lr=lr, weight_decay=weight_decay)
+            optimizer = optim.SGD(params, lr=lr, weight_decay=weight_decay, momentum=0.9)
         elif opt_name.lower() == 'adagrad':
             optimizer = optim.Adagrad(params, lr=lr)
         elif opt_name.lower() == 'rmsprop':
@@ -76,16 +76,21 @@ class MetaModel2(BaseModel):
         elif opt_name.lower() == 'sparse_adam':
             optimizer = optim.SparseAdam(params, lr=lr)
         else:
-            optimizer = optim.Adam(params, lr=lr, weight_decay=2)
+            optimizer = optim.Adam(params, lr=lr, weight_decay=weight_decay)
 
-        optimizer = MetaOptimizer(optimizer, hpo_lr=1)
+        optimizer = MetaOptimizer(optimizer, hpo_lr=1e-4)
 
         return optimizer
 
     def forward(self, batch):
         return self.sub_model.forward(batch)
 
+    def current_epoch_trainloaders(self, nepoch):
+        self.dataset_list[0].set_mode('all')
+        return self.dataset_list[0].get_loader()
+
     def current_epoch_metaloaders(self, nepoch):
+        self.dataset_list[0].set_mode('original')
         return self.dataset_list[0].get_loader()
 
     def training_epoch(self, nepoch):
@@ -108,10 +113,7 @@ class MetaModel2(BaseModel):
                 batch['neg_item'] = self._neg_sampling(batch)
                 self.sub_model.optimizer.zero_grad()
                 training_step_args = {'batch': batch}
-                if nepoch > self.config['train']['warmup_epoch']:
-                    loss = self.training_step(**training_step_args)
-                else:
-                    loss = self.sub_model.training_step(**training_step_args)
+                loss = self.training_step(**training_step_args)
                 loss.backward()
                 self.sub_model.optimizer.step()
                 outputs.append({f"loss_{loader_idx}": loss.detach()})
@@ -123,69 +125,50 @@ class MetaModel2(BaseModel):
         return output_list
 
     def _outter_loop(self, nepoch):
-        meta_dataloader = self.current_epoch_metaloaders(nepoch)
-
-        assert self.config['train']['descent_step'] < len(meta_dataloader)
-        loader = tqdm(
-            meta_dataloader,
-            total=self.config['train']['descent_step'],
-            ncols=75,
-            desc=f"Meta Training {nepoch:>5}",
-            leave=False,
-        )
-        proxy_model = self._register_sub_model().to(self.device)
-        proxy_model._init_model(self.dataset_list[0])
-        proxy_model.load_state_dict(self.sub_model.state_dict())
-        for batch_idx, batch in enumerate(loader):
-            if batch_idx >= self.config['train']['descent_step']:
-                break
+        # Update dataset
+        meta_train_loss = 0
+        for batch_idx, batch in enumerate(self.current_epoch_trainloaders(nepoch)):
             batch = {k: v.to(self.device) for k, v in batch.items()}
             batch['neg_item'] = self._neg_sampling(batch)
-            training_step_args = {'batch': batch, 'sub_model': proxy_model}
-            loss = self.training_step(**training_step_args)
-            proxy_model.optimizer.zero_grad()
-            loss.backward()
-            proxy_model.optimizer.step()
+            training_step_args = {'batch': batch}
+            meta_train_loss = meta_train_loss + self.training_step(**training_step_args)
 
-        try:
-            batch = next(self.metaloader_iter)
-        except StopIteration:
-            self.metaloader_iter = iter(self.current_epoch_metaloaders(nepoch))
-            batch = next(self.metaloader_iter)
-        batch = {k: v.to(self.device) for k, v in batch.items()}
-        batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch, 'sub_model': proxy_model}
-        meta_loss = self.training_step(**training_step_args)
-
-        trainloader = self.current_epoch_trainloaders(nepoch)
-        batch = next(iter(trainloader))
-        batch = {k: v.to(self.device) for k, v in batch.items()}
-        batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch}
-        meta_train_loss = self.training_step(**training_step_args)
+        meta_loss = 0
+        for batch_idx, batch in enumerate(self.current_epoch_metaloaders(nepoch)):
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            batch['neg_item'] = self._neg_sampling(batch)
+            training_step_args = {'batch': batch}
+            meta_loss = meta_loss + self.sub_model.training_step(**training_step_args)
 
         self.meta_optimizer.step(
             val_loss=meta_loss,
             train_loss=meta_train_loss,
             aux_params = list(self.meta_module.parameters()),
             parameters = list(self.sub_model.parameters()),
-            return_grads = True,
+            return_grads = False,
         )
+
+    @staticmethod
+    def _multi_round_gumbel(logits, k, tau):
+        rst = 0
+        for _ in range(k):
+            rst += F.gumbel_softmax(logits, tau=tau, hard=True)
+        rst = rst.clamp_max(max=1)
+        return rst
 
     def selection(self, query, seq_len):
         logits = self.meta_module(query).squeeze()
         mask = torch.arange(query.shape[1], device=self.device).unsqueeze(0) >= seq_len.unsqueeze(-1)
         logits = logits.masked_fill(mask, -torch.inf)
-        out = self.training * F.gumbel_softmax(logits, dim=-1, tau=self.tau) + \
-            (1 - self.training) * F.softmax(logits, dim=-1)
-        # out = torch.clamp(out * seq_len.unsqueeze(-1), min=0, max=1)
+        rst = []
+        for idx, logit in enumerate(logits):
+            rst.append(self._multi_round_gumbel(logit, seq_len[idx], self.tau))
+        rst = torch.stack(rst)
         self.tau = max(self.tau * self.annealing_factor, 1)
-        return out
+        return rst
 
-    def training_step(self, batch, sub_model=None, reduce=True, return_query=True):
-        if sub_model is None:
-            sub_model = self.sub_model
+    def training_step(self, batch, reduce=True, return_query=True):
         query = self.sub_model.forward(batch, need_pooling=False)
-        batch['input_weight'] = self.selection(query, batch['seqlen'])
-        loss_value = sub_model.training_step(batch, reduce=True, return_query=False)
+        batch['attention_mask'] = self.selection(query, batch['seqlen'])
+        loss_value = self.sub_model.training_step(batch, reduce=True, return_query=False)
         return loss_value

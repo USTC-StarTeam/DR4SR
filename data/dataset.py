@@ -163,6 +163,63 @@ class SeparateDataset(BaseDataset):
             batch['user_hist'] = data[6][idx]
         return batch
 
+class PatternDataset(SeparateDataset):
+    def _load_datasets(self):
+        super()._load_datasets()
+        path_prefix = 'dataset'
+        data_list = []
+        if self.phase == 'train':
+            pattern_data_list = []
+        for domain_name in self.domain_name_list:
+            path = os.path.join(path_prefix, self.name, domain_name)
+            if self.phase == 'train':
+                data = torch.load(os.path.join(path, self.phase + '.pth'))
+                pattern_data = torch.load(os.path.join(path, self.phase + self.config['data']['train_file'] + '.pth'))
+                pattern_data_list.append(pattern_data)
+            else:
+                data = torch.load(os.path.join(path, self.phase + '.pth'))
+            data_list.append(data)
+        self._data = data_list
+        if self.phase == 'train':
+            self._pattern_data = pattern_data_list
+
+    def _build(self,):
+        if self.phase == 'train':
+            data = []
+            for _ in self._data:
+                data += _
+            self._data = self.unpack(data)
+            pattern_data = []
+            for _ in self._pattern_data:
+                pattern_data += _
+            self._pattern_data = self.unpack(pattern_data)
+        else:
+            self._data = {
+                self.domain_name_list[idx]: self.unpack(_) for idx, _ in enumerate(self._data)
+            }
+
+    def build(self):
+        self._build()
+        if self.phase == 'train':
+            self.data_index = torch.arange(len(self._data[0]))
+            self.original_index = torch.arange(len(self._data[0]))
+            self.data = self._data
+            self.pattern_index = torch.arange(len(self._pattern_data[0]))
+            self.pattern_data = self._pattern_data
+        else:
+            self.data = self._data
+
+    def set_mode(self, mode):
+        if mode == 'original':
+            self.data = self._data
+        elif mode == 'pattern':
+            self.data = self._pattern_data
+        elif mode == 'all':
+            self.data = list(zip(self._data, self._pattern_data))
+            self.data = [_[0] + _[1] for _ in self.data]
+        else:
+            raise NotImplementedError
+
 class MixDataset(BaseDataset):
     """Merge train/eval sequences into a mixed sequence.
     """

@@ -62,7 +62,7 @@ class MetaModel(BaseModel):
         if opt_name.lower() == 'adam':
             optimizer = optim.Adam(params, lr=lr)
         elif opt_name.lower() == 'sgd':
-            optimizer = optim.SGD(params, lr=lr, weight_decay=weight_decay)
+            optimizer = optim.SGD(params, lr=lr, weight_decay=weight_decay, momentum=0.9)
         elif opt_name.lower() == 'adagrad':
             optimizer = optim.Adagrad(params, lr=lr)
         elif opt_name.lower() == 'rmsprop':
@@ -70,9 +70,9 @@ class MetaModel(BaseModel):
         elif opt_name.lower() == 'sparse_adam':
             optimizer = optim.SparseAdam(params, lr=lr)
         else:
-            optimizer = optim.Adam(params, lr=lr, weight_decay=2)
+            optimizer = optim.Adam(params, lr=lr, weight_decay=weight_decay)
 
-        optimizer = MetaOptimizer(optimizer, hpo_lr=1)
+        optimizer = MetaOptimizer(optimizer, hpo_lr=1e-4)
 
         return optimizer
 
@@ -117,39 +117,12 @@ class MetaModel(BaseModel):
         return output_list
 
     def _outter_loop(self, nepoch):
-        meta_dataloader = self.current_epoch_metaloaders(nepoch)
-
-        assert self.config['train']['descent_step'] < len(meta_dataloader)
-        loader = tqdm(
-            meta_dataloader,
-            total=self.config['train']['descent_step'],
-            ncols=75,
-            desc=f"Meta Training {nepoch:>5}",
-            leave=False,
-        )
-        proxy_model = self._register_sub_model().to(self.device)
-        proxy_model._init_model(self.dataset_list[0])
-        proxy_model.load_state_dict(self.sub_model.state_dict())
-        for batch_idx, batch in enumerate(loader):
-            if batch_idx >= self.config['train']['descent_step']:
-                break
-            batch = {k: v.to(self.device) for k, v in batch.items()}
-            batch['neg_item'] = self._neg_sampling(batch)
-            training_step_args = {'batch': batch, 'sub_model': proxy_model}
-            loss = self.training_step(**training_step_args)
-            proxy_model.optimizer.zero_grad()
-            loss.backward()
-            proxy_model.optimizer.step()
-
-        try:
-            batch = next(self.metaloader_iter)
-        except StopIteration:
-            self.metaloader_iter = iter(self.current_epoch_metaloaders(nepoch))
-            batch = next(self.metaloader_iter)
+        metaloader_iter = iter(self.current_epoch_metaloaders(nepoch))
+        batch = next(metaloader_iter)
         batch = {k: v.to(self.device) for k, v in batch.items()}
         batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch, 'sub_model': proxy_model}
-        meta_loss = self.training_step(**training_step_args)
+        training_step_args = {'batch': batch}
+        meta_loss = self.sub_model.training_step(**training_step_args)
 
         trainloader = self.current_epoch_trainloaders(nepoch)
         batch = next(iter(trainloader))
@@ -163,23 +136,20 @@ class MetaModel(BaseModel):
             train_loss=meta_train_loss,
             aux_params = list(self.meta_module.parameters()),
             parameters = list(self.sub_model.parameters()),
-            return_grads = True,
-            entropy = None
+            return_grads = False,
         )
 
     def selection(self, query):
         logits = self.meta_module(query)
-        # logits = F.softmax(logits, dim=0)
-        logits = torch.sigmoid(logits)
+        logits = F.softmax(logits, dim=0)
+        # logits = torch.sigmoid(logits)
         return logits.squeeze()
     
-    def training_step(self, batch, sub_model=None, reduce=True, return_query=True):
-        if sub_model is None:
-            sub_model = self.sub_model
-        loss_value = sub_model.training_step(batch, reduce=False, return_query=False)
+    def training_step(self, batch, reduce=True, return_query=True):
+        loss_value = self.sub_model.training_step(batch, reduce=False, return_query=False)
         query = self.sub_model.forward(batch)
-        weight = self.selection(query)
-        # weight = self.selection(query) * query.shape[0]
+        # weight = self.selection(query)
+        weight = self.selection(query) * query.shape[0]
         loss_value = (loss_value * weight).sum()
         return loss_value
     

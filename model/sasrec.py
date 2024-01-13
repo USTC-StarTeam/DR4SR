@@ -43,12 +43,19 @@ class SASRecQueryEncoder(torch.nn.Module):
         position_embs = self.position_emb(positions)
         seq_embs = self.item_encoder(user_hist)
 
-        mask4padding = user_hist == 0  # BxL
         L = user_hist.size(-1)
-        if not self.bidirectional:
-            attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_hist.device), 1)
-        else:
-            attention_mask = torch.zeros((L, L), dtype=torch.bool, device=user_hist.device)
+        if batch.get('attention_mask', None) is not None:
+            mask4padding = batch['attention_mask']
+            if not self.bidirectional:
+                attention_mask = torch.tril(torch.ones((L, L), device=user_hist.device), 0)
+            else:
+                attention_mask = torch.zeros((L, L), device=user_hist.device)
+        else:    
+            mask4padding = user_hist == 0  # BxL
+            if not self.bidirectional:
+                attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_hist.device), 1)
+            else:
+                attention_mask = torch.zeros((L, L), dtype=torch.bool, device=user_hist.device)
         try:
             transformer_input = batch['input_weight'].unsqueeze(-1) * (seq_embs + position_embs)
         except:

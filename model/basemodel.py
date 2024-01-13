@@ -71,6 +71,8 @@ class BaseModel(nn.Module):
             return SplitDataset
         elif config['data']['dataset_class'] == 'cluster':
             return ClusterDataset
+        elif config['data']['dataset_class'] == 'pattern':
+            return PatternDataset
         else:
             raise NotImplementedError
 
@@ -212,6 +214,19 @@ class BaseModel(nn.Module):
             return loss_value
     
     def training_epoch_end(self, output_list):
+        # debug_loader = self.dataset_list[0].get_loader(512, shuffle=False)
+        # loss_list, index_list = [], []
+        # for batch_idx, batch in enumerate(debug_loader):
+        #     batch = {k: v.to(self.device) for k, v in batch.items()}
+        #     batch['neg_item'] = self._neg_sampling(batch)
+        #     self.optimizer.zero_grad()
+        #     training_step_args = {'batch': batch, 'reduce': False}
+        #     loss = self.training_step(**training_step_args)
+        #     loss_list.append(loss)
+        #     index_list.append(batch['index'])
+        # loss_list = torch.cat(loss_list)
+        # index_list = torch.cat(index_list)
+
         output_list = [output_list] if not isinstance(output_list, list) else output_list
         for outputs in output_list:
             if isinstance(outputs, List):
