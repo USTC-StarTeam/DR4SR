@@ -4,7 +4,7 @@ import torch
 import logging
 import time
 import evaluation
-from data.dataset import BaseDataset
+from data.dataset import BaseDataset, PatternDataset
 from copy import deepcopy
 
 from tqdm import tqdm
@@ -19,7 +19,7 @@ from module.layers import MLPModule
 from model.basemodel import BaseModel
 
 class MetaModel3(BaseModel):
-    def __init__(self, config: Dict, dataset_list: List[BaseDataset]) -> None:
+    def __init__(self, config: Dict, dataset_list: List[PatternDataset]) -> None:
         super().__init__(config, dataset_list)
         self.interval = config['train']['interval']
         self.step_counter = 0
@@ -121,6 +121,7 @@ class MetaModel3(BaseModel):
                 if self.step_counter % self.config['train']['interval'] == 0 and \
                     nepoch > self.config['train']['warmup_epoch']:
                     self._outter_loop(nepoch)
+                    self.dataset_list[0].set_mode('all')
             output_list.append(outputs)
         return output_list
 
@@ -132,6 +133,7 @@ class MetaModel3(BaseModel):
             batch['neg_item'] = self._neg_sampling(batch)
             training_step_args = {'batch': batch}
             meta_train_loss = meta_train_loss + self.training_step(**training_step_args)
+            break
 
         meta_loss = 0
         for batch_idx, batch in enumerate(self.current_epoch_metaloaders(nepoch)):
@@ -139,6 +141,7 @@ class MetaModel3(BaseModel):
             batch['neg_item'] = self._neg_sampling(batch)
             training_step_args = {'batch': batch}
             meta_loss = meta_loss + self.sub_model.training_step(**training_step_args)
+            break
 
         self.meta_optimizer.step(
             val_loss=meta_loss,
@@ -152,8 +155,8 @@ class MetaModel3(BaseModel):
     def _multi_round_gumbel(logits, k, tau):
         rst = 0
         for _ in range(k):
-            rst += F.gumbel_softmax(logits, tau=tau, hard=True)
-        rst = rst.clamp_max(max=1)
+            rst += F.gumbel_softmax(logits, tau=tau, hard=False)
+        # rst = rst.clamp_max(max=1)
         return rst
 
     def selection(self, query, seq_len):
@@ -169,6 +172,6 @@ class MetaModel3(BaseModel):
 
     def training_step(self, batch, reduce=True, return_query=True):
         query = self.sub_model.forward(batch, need_pooling=False)
-        batch['attention_mask'] = self.selection(query, batch['seqlen'])
+        batch['input_weight'] = self.selection(query, batch['seqlen'])
         loss_value = self.sub_model.training_step(batch, reduce=True, return_query=False)
         return loss_value

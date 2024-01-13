@@ -47,7 +47,7 @@ class SASRecQueryEncoder(torch.nn.Module):
         if batch.get('attention_mask', None) is not None:
             mask4padding = batch['attention_mask']
             if not self.bidirectional:
-                attention_mask = torch.tril(torch.ones((L, L), device=user_hist.device), 0)
+                attention_mask = torch.tril(torch.ones((L, L), device=user_hist.device), 0).float()
             else:
                 attention_mask = torch.zeros((L, L), device=user_hist.device)
         else:    
