@@ -216,9 +216,10 @@ class PatternDataset(SeparateDataset):
             self.data = self._pattern_data
         elif mode == 'all':
             self.data = list(zip(self._data, self._pattern_data))
-            self.data = [_[0] + _[1] for _ in self.data]
+            self.data = [torch.cat([_[0], _[1]]) for _ in self.data]
         else:
             raise NotImplementedError
+        self.data_index = torch.arange(len(self.data[0]))
 
 class MixDataset(BaseDataset):
     """Merge train/eval sequences into a mixed sequence.

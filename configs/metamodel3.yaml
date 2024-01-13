@@ -14,3 +14,7 @@ train:
   meta_weight_decay: 1.0e-4
   descent_step: 30
   warmup_epoch: -1
+
+data:
+  dataset_class: 'pattern'
+  train_file: '_new-pure'
