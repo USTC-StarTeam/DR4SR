@@ -9,7 +9,7 @@ from copy import deepcopy
 
 from tqdm import tqdm
 from torch import optim
-from utils import get_model_class, MetaOptimizer, normal_initialization, load_config
+from utils import get_model_class, MetaOptimizer, normal_initialization, load_config, SubsetOperator
 from collections import defaultdict
 from model.loss_func import *
 from data.dataset import *
@@ -38,6 +38,8 @@ class MetaModel3(BaseModel):
 
         self.meta_optimizer = self._get_meta_optimizers()
         self.metaloader_iter = iter(self.current_epoch_metaloaders(nepoch=0))
+
+        self.gumbel_selector = SubsetOperator(k=self.max_seq_len)
 
     def _register_sub_model(self) -> BaseModel:
         sub_model_config = {
@@ -165,10 +167,8 @@ class MetaModel3(BaseModel):
         mask = torch.arange(query.shape[1], device=self.device).unsqueeze(0) >= seq_len.unsqueeze(-1)
         logits = logits.masked_fill(mask, -torch.inf)
         rst = []
-        rst = self._multi_round_gumbel(logits, 10, self.tau)
-        # for idx, logit in enumerate(logits):
-        #     rst.append(self._multi_round_gumbel(logit, seq_len[idx], self.tau))
-        # rst = torch.stack(rst)
+        # rst = self._multi_round_gumbel(logits, 10, self.tau)
+        rst = self.gumbel_selector(logits, self.tau) * seq_len.unsqueeze(1) / self.max_seq_len
         self.tau = max(self.tau * self.annealing_factor, 1)
         return rst
 
