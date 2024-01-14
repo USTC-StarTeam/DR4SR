@@ -156,6 +156,7 @@ class MetaModel3(BaseModel):
         rst = 0
         for _ in range(k):
             rst += F.gumbel_softmax(logits, tau=tau, hard=False)
+        
         # rst = rst.clamp_max(max=1)
         return rst
 
@@ -164,9 +165,10 @@ class MetaModel3(BaseModel):
         mask = torch.arange(query.shape[1], device=self.device).unsqueeze(0) >= seq_len.unsqueeze(-1)
         logits = logits.masked_fill(mask, -torch.inf)
         rst = []
-        for idx, logit in enumerate(logits):
-            rst.append(self._multi_round_gumbel(logit, seq_len[idx], self.tau))
-        rst = torch.stack(rst)
+        rst = self._multi_round_gumbel(logits, 10, self.tau)
+        # for idx, logit in enumerate(logits):
+        #     rst.append(self._multi_round_gumbel(logit, seq_len[idx], self.tau))
+        # rst = torch.stack(rst)
         self.tau = max(self.tau * self.annealing_factor, 1)
         return rst
 
