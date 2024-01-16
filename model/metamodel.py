@@ -57,6 +57,7 @@ class MetaModel(BaseModel):
     def _get_meta_optimizers(self):
         opt_name = self.config['train']['meta_optimizer']
         lr = self.config['train']['meta_learning_rate']
+        hpo_lr = self.config['train']['hpo_learning_rate']
         weight_decay = self.config['train']['meta_weight_decay']
         params = list(self.meta_module.parameters()) + [self.tau]
 
@@ -73,7 +74,7 @@ class MetaModel(BaseModel):
         else:
             optimizer = optim.Adam(params, lr=lr, weight_decay=weight_decay)
 
-        optimizer = MetaOptimizer(optimizer, hpo_lr=1)
+        optimizer = MetaOptimizer(optimizer, hpo_lr=hpo_lr)
 
         return optimizer
 
