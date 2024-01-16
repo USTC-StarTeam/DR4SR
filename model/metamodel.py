@@ -23,6 +23,7 @@ class MetaModel(BaseModel):
         self.interval = config['train']['interval']
         self.step_counter = 0
         self.item_embedding = None # MetaModel is just a trainer without item embedding
+        self.tau = nn.Parameter(torch.ones(1, device=self.device) * 10)
 
     def _init_model(self, train_data):
         self.sub_model : BaseModel = self._register_sub_model()
@@ -50,14 +51,14 @@ class MetaModel(BaseModel):
         return nn.Sequential(
             nn.Linear(self.embed_dim, self.embed_dim),
             nn.ReLU(),
-            nn.Linear(self.embed_dim, 1),
+            nn.Linear(self.embed_dim, 2),
         )
 
     def _get_meta_optimizers(self):
         opt_name = self.config['train']['meta_optimizer']
         lr = self.config['train']['meta_learning_rate']
         weight_decay = self.config['train']['meta_weight_decay']
-        params = self.meta_module.parameters()
+        params = list(self.meta_module.parameters()) + [self.tau]
 
         if opt_name.lower() == 'adam':
             optimizer = optim.Adam(params, lr=lr)
@@ -72,7 +73,7 @@ class MetaModel(BaseModel):
         else:
             optimizer = optim.Adam(params, lr=lr, weight_decay=weight_decay)
 
-        optimizer = MetaOptimizer(optimizer, hpo_lr=1e-4)
+        optimizer = MetaOptimizer(optimizer, hpo_lr=1)
 
         return optimizer
 
@@ -141,15 +142,18 @@ class MetaModel(BaseModel):
 
     def selection(self, query):
         logits = self.meta_module(query)
-        logits = F.softmax(logits, dim=0)
+        # logits = F.softmax(logits, dim=0)
         # logits = torch.sigmoid(logits)
+        logits = F.gumbel_softmax(logits, tau=torch.clip(self.tau, min=1), dim=-1, hard=False)[:, 0]
         return logits.squeeze()
-    
+
     def training_step(self, batch, reduce=True, return_query=True):
         loss_value = self.sub_model.training_step(batch, reduce=False, return_query=False)
         query = self.sub_model.forward(batch)
-        # weight = self.selection(query)
-        weight = self.selection(query) * query.shape[0]
+        weight = self.selection(query)
+        # weight = self.selection(query) * query.shape[0]
+        mask = batch['user_id'] == 0
+        weight = weight.masked_fill(mask, 1)
         loss_value = (loss_value * weight).sum()
         return loss_value
     
