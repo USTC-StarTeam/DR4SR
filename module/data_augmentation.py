@@ -606,11 +606,16 @@ class CL4SRecAugmentation(torch.nn.Module):
         if self.config['augment_type'] == 'item_crop':
             self.augmentation = Item_Crop(self.config['tau'])
         elif self.config['augment_type'] == 'item_mask':
-            self.augmentation = Item_Mask(mask_id=train_data.num_items)
+            self.augmentation = Item_Mask(mask_id=train_data.num_items, gamma=self.config['gamma'])
         elif self.config['augment_type'] == 'item_reorder':
-            self.augmentation = Item_Reorder()
+            self.augmentation = Item_Reorder(beta=self.config['beta'])
         elif self.config['augment_type'] == 'item_random':
-            self.augmentation = Item_Random(mask_id=train_data.num_items)
+            self.augmentation = Item_Random(
+                mask_id=train_data.num_items,
+                tao=self.config['tau'],
+                gamma=self.config['gamma'],
+                beta=self.config['beta'],
+            )
         else:
             raise ValueError(f"augmentation type: '{self.config['augment_type']}' is invalided")
         self.InfoNCE_loss_fn = InfoNCELoss(temperature=self.config['temperature'], sim_method='inner_product', neg_type='batch_both')
