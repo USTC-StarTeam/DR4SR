@@ -18,6 +18,92 @@ from module.layers import MLPModule
 
 from model.basemodel import BaseModel
 
+class Selector(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.embed_dim = config['model']['embed_dim']
+        # transformer_encoder = torch.nn.TransformerEncoderLayer(
+        #     d_model=self.embed_dim,
+        #     nhead=2,
+        #     dim_feedforward=4 * self.embed_dim,
+        #     dropout=0.5,
+        #     activation='gelu',
+        #     layer_norm_eps=1e-12,
+        #     batch_first=True,
+        #     norm_first=False
+        # )
+        # self.transformer_layer = torch.nn.TransformerEncoder(
+        #     encoder_layer=transformer_encoder,
+        #     num_layers=1,
+        # )
+        self.dropout = nn.Dropout(0.5)
+        self.query_transform = nn.Identity()
+        self.mlp = nn.Sequential(
+            MLPModule([
+                    self.embed_dim,
+                    self.embed_dim,
+                ],
+                dropout=0.5,
+                activation_func='relu',
+            ),
+            nn.Linear(self.embed_dim, 2),
+        )
+        self.scorer = nn.Sequential(
+            nn.Sigmoid(),
+        )
+        self.gumbel_selector = SubsetOperator(5, True)
+        self.alpha = 0.
+        self.tau = nn.Parameter(torch.ones(1, device=config['train']['device']) * 10)
+
+    def forward(self, batch, input_emb, position_emb, query=None):
+        user_hist = batch['in_item_id']
+        seq_len = batch['seqlen']
+        device = input_emb.weight.device
+        L = user_hist.shape[1]
+        if query is None:
+            positions = torch.arange(user_hist.size(1), dtype=torch.long, device=device)
+            positions = positions.unsqueeze(0).expand_as(user_hist)
+            position_embs = position_emb(positions)
+            seq_embs = input_emb(user_hist)
+            query = self.dropout(position_embs + seq_embs)
+            mask4padding = user_hist == 0
+            attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=device), 1)
+            query = self.transformer_layer(
+                src=query,
+                mask=attention_mask,
+                src_key_padding_mask=mask4padding,
+            )
+
+        logits = self.mlp(query) # [B, L, 2]
+
+        # -------Sigmoid---------
+        # score = self.scorer(logits) + self.alpha
+        # score_hard = (score >= 0.49).float()
+        # selection = score_hard + score - score.detach()
+        # self.alpha = self.alpha * 0.999
+
+        # -----Gumbel softmax----
+        score = F.gumbel_softmax(logits, tau=torch.clip(self.tau, min=2), dim=-1, hard=True)
+        # score_hard = (score >= (1 / seq_len.reshape(-1, 1, 1) * 0.2)).float()
+        # selection = score_hard + score - score.detach()
+        # # selection = self.gumbel_selector(logits.squeeze(), self.tau).unsqueeze(-1)
+        selection = score[:, :, 0:1]
+        pattern_mask = batch['user_id'] == 0
+        selection = selection.masked_fill(pattern_mask.reshape(-1, 1, 1), 1)
+        mask = torch.arange(query.shape[1], device=device).unsqueeze(0) >= seq_len.unsqueeze(-1)
+        selection = selection.masked_fill(mask.unsqueeze(-1), 0)
+        
+        return selection
+
+        logits = self.meta_module(query).squeeze()
+        mask = torch.arange(query.shape[1], device=self.device).unsqueeze(0) >= seq_len.unsqueeze(-1)
+        logits = logits.masked_fill(mask, -torch.inf)
+        rst = []
+        # rst = self._multi_round_gumbel(logits, 10, self.tau)
+        rst = self.gumbel_selector(logits, self.tau) * seq_len.unsqueeze(1) / self.max_seq_len
+        self.tau = max(self.tau * self.annealing_factor, 1)
+        return rst
+
 class MetaModel3(BaseModel):
     def __init__(self, config: Dict, dataset_list: List[PatternDataset]) -> None:
         super().__init__(config, dataset_list)
@@ -52,18 +138,12 @@ class MetaModel3(BaseModel):
         return model_class(sub_model_config, self.dataset_list)
 
     def _register_meta_modules(self) -> nn.Module:
-        return MLPModule([
-                self.embed_dim,
-                self.embed_dim,
-                1,
-            ],
-            dropout=0.5,
-            activation_func='leakyrelu',
-        )
+        return Selector(self.config)
 
     def _get_meta_optimizers(self):
         opt_name = self.config['train']['meta_optimizer']
         lr = self.config['train']['meta_learning_rate']
+        hpo_lr = self.config['train']['hpo_learning_rate']
         weight_decay = self.config['train']['meta_weight_decay']
         params = self.meta_module.parameters()
 
@@ -80,7 +160,7 @@ class MetaModel3(BaseModel):
         else:
             optimizer = optim.Adam(params, lr=lr, weight_decay=weight_decay)
 
-        optimizer = MetaOptimizer(optimizer, hpo_lr=1e-4)
+        optimizer = MetaOptimizer(optimizer, hpo_lr=hpo_lr)
 
         return optimizer
 
@@ -115,7 +195,10 @@ class MetaModel3(BaseModel):
                 batch['neg_item'] = self._neg_sampling(batch)
                 self.sub_model.optimizer.zero_grad()
                 training_step_args = {'batch': batch}
-                loss = self.training_step(**training_step_args)
+                if nepoch > self.config['train']['warmup_epoch']:
+                    loss = self.training_step(**training_step_args)
+                else:
+                    loss = self.sub_model.training_step(**training_step_args)
                 loss.backward()
                 self.sub_model.optimizer.step()
                 outputs.append({f"loss_{loader_idx}": loss.detach()})
@@ -153,27 +236,14 @@ class MetaModel3(BaseModel):
             return_grads = False,
         )
 
-    @staticmethod
-    def _multi_round_gumbel(logits, k, tau):
-        rst = 0
-        for _ in range(k):
-            rst += F.gumbel_softmax(logits, tau=tau, hard=False)
-        
-        # rst = rst.clamp_max(max=1)
-        return rst
-
-    def selection(self, query, seq_len):
-        logits = self.meta_module(query).squeeze()
-        mask = torch.arange(query.shape[1], device=self.device).unsqueeze(0) >= seq_len.unsqueeze(-1)
-        logits = logits.masked_fill(mask, -torch.inf)
-        rst = []
-        # rst = self._multi_round_gumbel(logits, 10, self.tau)
-        rst = self.gumbel_selector(logits, self.tau) * seq_len.unsqueeze(1) / self.max_seq_len
-        self.tau = max(self.tau * self.annealing_factor, 1)
-        return rst
-
     def training_step(self, batch, reduce=True, return_query=True):
         query = self.sub_model.forward(batch, need_pooling=False)
-        batch['input_weight'] = self.selection(query, batch['seqlen'])
+        batch['input_weight'] = self.meta_module(
+            # query,
+            batch,
+            self.sub_model.item_embedding,
+            self.sub_model.query_encoder.position_emb,
+            query,
+        )
         loss_value = self.sub_model.training_step(batch, reduce=True, return_query=False)
         return loss_value

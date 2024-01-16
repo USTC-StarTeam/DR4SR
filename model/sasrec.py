@@ -57,7 +57,7 @@ class SASRecQueryEncoder(torch.nn.Module):
             else:
                 attention_mask = torch.zeros((L, L), dtype=torch.bool, device=user_hist.device)
         try:
-            transformer_input = batch['input_weight'].unsqueeze(-1) * (seq_embs + position_embs)
+            transformer_input = batch['input_weight'] * (seq_embs + position_embs)
         except:
             transformer_input = seq_embs + position_embs
         transformer_out = self.transformer_layer(
