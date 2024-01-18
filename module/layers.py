@@ -230,3 +230,81 @@ class MLPModule(torch.nn.Module):
 
     def forward(self, input):
         return self.model(input)
+
+class VectorQuantizer(nn.Module):
+    """
+    Discretization bottleneck part of the VQ-VAE.
+
+    Inputs:
+    - n_e : number of embeddings
+    - e_dim : dimension of embedding
+    - beta : commitment cost used in loss term, beta * ||z_e(x)-sg[e]||^2
+    """
+
+    def __init__(self, dim, N, K, beta=0.25, depth=1, device='cuda'):
+        super(VectorQuantizer, self).__init__()
+        self.N = N
+        self.K = K
+        self.e_dim = dim // N
+        self.beta = beta
+        self.depth = depth
+
+        data = torch.zeros(N, K, self.e_dim, device=device)
+        nn.init.uniform_(data, -1.0 / self.N, 1.0 / self.N)
+        self.embedding = nn.Parameter(data)
+
+    def forward(self, z):
+        """
+        Inputs the output of the encoder network z and maps it to a discrete 
+        one-hot vector that is the index of the closest embedding vector e_j
+
+        z (continuous) -> z_q (discrete)
+
+        z.shape = (batch, channel, height, width)
+
+        quantization pipeline:
+
+            1. get encoder input (B,C,H,W)
+            2. flatten input to (B*H*W,C)
+
+        """
+        B, D = z.shape
+        z_residual = z.reshape(B, self.N, 1, self.e_dim)
+        z_q = []
+        for _ in range(self.depth):
+            # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
+            # d = torch.sum(z ** 2, dim=1, keepdim=True) + \
+            #     torch.sum(self.embedding.weight**2, dim=1) - 2 * \
+            #     torch.matmul(z, self.embedding.weight.t())
+            d = torch.cdist(z_residual, self.embedding).squeeze()
+
+            # find closest encodings
+            min_encoding_indices = torch.argmin(d, dim=-1).unsqueeze(-1)
+            min_encodings = torch.zeros(
+                min_encoding_indices.shape[0],
+                self.N,
+                self.K,
+            ).to(z.device)
+            min_encodings = min_encodings.scatter(-1, min_encoding_indices, 1)
+
+            # get quantized latent vectors
+            quantization_emb = torch.einsum('BNK,NKD->BND', min_encodings, self.embedding)
+            z_residual = z_residual - quantization_emb.unsqueeze(-2)
+            quantization_emb = quantization_emb.flatten(-2, -1)
+            z_q.append(quantization_emb)
+        z_q_residual = torch.stack(z_q, dim=1)
+        z_q = z_q_residual.sum(1)
+
+        # compute loss for embedding
+        loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
+            torch.mean((z_q - z.detach()) ** 2)
+
+        # preserve gradients
+        z_q = z + (z_q - z).detach()
+
+        # perplexity
+        # e_mean = torch.mean(min_encodings.flatten(0, 1), dim=0)
+        # perplexity = torch.exp(-torch.sum(e_mean * torch.log(e_mean + 1e-10)))
+        perplexity = 0
+
+        return loss, z_q, perplexity, min_encodings, min_encoding_indices
