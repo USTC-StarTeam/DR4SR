@@ -272,10 +272,6 @@ class VectorQuantizer(nn.Module):
         z_residual = z.reshape(B, self.N, 1, self.e_dim)
         z_q = []
         for _ in range(self.depth):
-            # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
-            # d = torch.sum(z ** 2, dim=1, keepdim=True) + \
-            #     torch.sum(self.embedding.weight**2, dim=1) - 2 * \
-            #     torch.matmul(z, self.embedding.weight.t())
             d = torch.cdist(z_residual, self.embedding).squeeze()
 
             # find closest encodings
@@ -296,8 +292,12 @@ class VectorQuantizer(nn.Module):
         z_q = z_q_residual.sum(1)
 
         # compute loss for embedding
-        loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
-            torch.mean((z_q - z.detach()) ** 2)
+        # loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
+        #     torch.mean((z_q - z.detach()) ** 2)
+        loss = 0
+        for d in range(self.depth):
+            loss += torch.cdist(z, z_q_residual[:, 0:d+1].sum(1).detach()).mean()
+        loss = loss / self.depth
 
         # preserve gradients
         z_q = z + (z_q - z).detach()

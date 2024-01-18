@@ -90,30 +90,63 @@ class SASRec3(BaseModel):
         )
         self.quantizer = VectorQuantizer(
             self.embed_dim,
-            self.embed_dim // self.embed_dim,
-            K=128,
+            self.embed_dim,
+            K=256,
             beta=0.25,
-            depth=4
+            depth=4,
         )
 
     def current_epoch_trainloaders(self, nepoch):
         return super().current_epoch_trainloaders(nepoch)
 
+    # def forward(self, batch, need_pooling=True):
+    #     if batch['nepoch'] < self.config['train']['warmup_epoch']:
+    #         query_q = self.query_encoder(batch, need_pooling)
+    #         embedding_loss, perplexity = 0, 0
+    #     else:
+    #         query = self.query_encoder(batch, need_pooling)
+    #         embedding_loss, query_q, perplexity, _, _ = self.quantizer(query)
+    #     self.embedding_loss = embedding_loss
+    #     self.perplexity = perplexity
+    #     return query_q
+
     def forward(self, batch, need_pooling=True):
-        if batch['nepoch'] < self.config['train']['warmup_epoch']:
-            query_q = self.query_encoder(batch, need_pooling)
-            embedding_loss, perplexity = 0, 0
-        else:
-            query = self.query_encoder(batch, need_pooling)
-            embedding_loss, query_q, perplexity, _, _ = self.quantizer(query)
+        query = self.query_encoder(batch, need_pooling)
+        embedding_loss, query_q, perplexity, _, _ = self.quantizer(query)
         self.embedding_loss = embedding_loss
         self.perplexity = perplexity
         return query_q
 
+    @staticmethod
+    def alignment(x, y):
+        x, y = F.normalize(x, dim=-1), F.normalize(y, dim=-1)
+        return (x - y).norm(p=2, dim=1).pow(2).mean()
+
+    @staticmethod
+    def uniformity(x):
+        x = F.normalize(x, dim=-1)
+        return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
+
     def training_step(self, batch, reduce=True, return_query=False):
-        loss_value = super().training_step(batch, reduce=True, return_query=False)
-        loss_value = loss_value + self.embedding_loss
+        # loss_value, query = super().training_step(batch, reduce=True, return_query=True)
+        query = self.query_encoder(batch, need_pooling=True)
+        embedding_loss, query_q, perplexity, _, _ = self.quantizer(query)
+        alignment = 0
+        # alignment += self.alignment(query, query_q)
+        alignment += self.alignment(query, self.item_embedding.weight[batch[self.fiid]])
+        # alignment += self.alignment(query_q, self.item_embedding.weight[batch[self.fiid]])
+        uniformity = self.config['model']['uniformity'] * (
+            self.uniformity(query) +
+            self.uniformity(query_q) +
+            self.uniformity(self.item_embedding.weight[batch[self.fiid]])
+        )
+        loss_value = alignment + uniformity + embedding_loss
         return loss_value
+
+    # def training_step(self, batch, reduce=True, return_query=False):
+    #     loss_value = super().training_step(batch, reduce=True, return_query=False)
+    #     loss_value = loss_value + self.embedding_loss
+    #     return loss_value
 
     def training_epoch(self, nepoch):
         output_list = []
