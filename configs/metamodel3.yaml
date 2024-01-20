@@ -14,7 +14,7 @@ train:
   hpo_learning_rate: 1
   meta_weight_decay: 2
   descent_step: 30
-  warmup_epoch: 10
+  warmup_epoch: -1
 
 data:
   dataset_class: 'pattern'

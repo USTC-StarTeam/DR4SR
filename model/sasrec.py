@@ -37,25 +37,27 @@ class SASRecQueryEncoder(torch.nn.Module):
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type=self.eval_pooling_type)
 
     def forward(self, batch, need_pooling=True):
-        user_hist = batch['in_'+self.fiid]
-        positions = torch.arange(user_hist.size(1), dtype=torch.long, device=user_hist.device)
-        positions = positions.unsqueeze(0).expand_as(user_hist)
-        position_embs = self.position_emb(positions)
-        seq_embs = self.item_encoder(user_hist)
+        seq_len = batch['seqlen']
+        if batch.get('seq_emb', None) is None:
+            user_hist = batch['in_'+self.fiid]
+            positions = torch.arange(user_hist.size(1), dtype=torch.long, device=seq_len.device)
+            positions = positions.unsqueeze(0).expand_as(user_hist)
+            position_embs = self.position_emb(positions)
+            seq_embs = self.item_encoder(user_hist)
 
-        L = user_hist.size(-1)
-        if batch.get('attention_mask', None) is not None:
-            mask4padding = batch['attention_mask']
-            if not self.bidirectional:
-                attention_mask = torch.tril(torch.ones((L, L), device=user_hist.device), 0).float()
-            else:
-                attention_mask = torch.zeros((L, L), device=user_hist.device)
-        else:    
             mask4padding = user_hist == 0  # BxL
-            if not self.bidirectional:
-                attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_hist.device), 1)
-            else:
-                attention_mask = torch.zeros((L, L), dtype=torch.bool, device=user_hist.device)
+        else:
+            seq_embs = batch['seq_emb']
+            positions = torch.arange(seq_embs.size(1), dtype=torch.long, device=seq_len.device)
+            positions = positions.unsqueeze(0)
+            position_embs = self.position_emb(positions)
+            mask4padding = None
+
+        L = seq_embs.size(1)
+        if not self.bidirectional:
+            attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=seq_len.device), 1)
+        else:
+            attention_mask = torch.zeros((L, L), dtype=torch.bool, device=seq_len.device)
         try:
             transformer_input = batch['input_weight'] * (seq_embs + position_embs)
         except:
@@ -88,13 +90,32 @@ class SASRec(BaseModel):
             self.item_embedding,
         )
 
-    def _init_model(self, train_data):
-        super()._init_model(train_data)
-        self.augmentation_model = data_augmentation.Cluster(self.config['model'], train_data)
-        self.kmeans_train_loader = deepcopy(self.dataset_list[0]).get_loader(shuffle=False)
-
     def current_epoch_trainloaders(self, nepoch):
         return super().current_epoch_trainloaders(nepoch)
 
     def forward(self, batch, need_pooling=True):
         return self.query_encoder(batch, need_pooling)
+
+    @staticmethod
+    def alignment(x, y):
+        x, y = F.normalize(x, dim=-1), F.normalize(y, dim=-1)
+        return (x - y).norm(p=2, dim=1).pow(2).mean()
+
+    @staticmethod
+    def uniformity(x):
+        x = F.normalize(x, dim=-1)
+        return torch.norm(x[:, None] - x, dim=2, p=2).pow(2).mul(-2).exp().mean().log()
+        return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
+
+    def training_step(self, batch, reduce=True, return_query=False, align=True):
+        if align:
+            query = self.query_encoder(batch, need_pooling=True)
+            alignment = self.alignment(query, self.item_embedding.weight[batch[self.fiid]])
+            uniformity = 1 * (
+                self.uniformity(query) +
+                self.uniformity(self.item_embedding.weight[batch[self.fiid]])
+            )
+            loss_value = alignment + uniformity
+            return loss_value
+        else:
+            return super().training_step(batch, reduce, return_query)

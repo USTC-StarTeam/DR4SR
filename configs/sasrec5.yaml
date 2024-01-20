@@ -12,4 +12,3 @@ model:
 
 train:
   warmup_epoch: -1
-  # learning_rate: 2.e-3

@@ -2,78 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model.basemodel import BaseModel
-from module.layers import SeqPoolingLayer, VectorQuantizer
+from module.layers import SeqPoolingLayer, SeqVectorQuantizer
 from module import data_augmentation
 from data import dataset
 from copy import deepcopy
 from tqdm import tqdm
+from model.sasrec import SASRecQueryEncoder
 
-class SASRecQueryEncoder(torch.nn.Module):
-    def __init__(
-            self, fiid, embed_dim, max_seq_len, n_head, hidden_size, dropout, activation, layer_norm_eps, n_layer, item_encoder,
-            bidirectional=False, training_pooling_type='last', eval_pooling_type='last') -> None:
-        super().__init__()
-        self.fiid = fiid
-        self.item_encoder = item_encoder
-        self.bidirectional = bidirectional
-        self.training_pooling_type = training_pooling_type
-        self.eval_pooling_type = eval_pooling_type
-        self.position_emb = torch.nn.Embedding(max_seq_len, embed_dim)
-        transformer_encoder = torch.nn.TransformerEncoderLayer(
-            d_model=embed_dim,
-            nhead=n_head,
-            dim_feedforward=hidden_size,
-            dropout=dropout,
-            activation=activation,
-            layer_norm_eps=layer_norm_eps,
-            batch_first=True,
-            norm_first=False
-        )
-        self.transformer_layer = torch.nn.TransformerEncoder(
-            encoder_layer=transformer_encoder,
-            num_layers=n_layer,
-        )
-        self.dropout = torch.nn.Dropout(p=dropout)
-        self.training_pooling_layer = SeqPoolingLayer(pooling_type=self.training_pooling_type)
-        self.eval_pooling_layer = SeqPoolingLayer(pooling_type=self.eval_pooling_type)
-
-    def forward(self, batch, need_pooling=True):
-        user_hist = batch['in_'+self.fiid]
-        positions = torch.arange(user_hist.size(1), dtype=torch.long, device=user_hist.device)
-        positions = positions.unsqueeze(0).expand_as(user_hist)
-        position_embs = self.position_emb(positions)
-        seq_embs = self.item_encoder(user_hist)
-
-        L = user_hist.size(-1)
-        if batch.get('attention_mask', None) is not None:
-            mask4padding = batch['attention_mask']
-            if not self.bidirectional:
-                attention_mask = torch.tril(torch.ones((L, L), device=user_hist.device), 0).float()
-            else:
-                attention_mask = torch.zeros((L, L), device=user_hist.device)
-        else:    
-            mask4padding = user_hist == 0  # BxL
-            if not self.bidirectional:
-                attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_hist.device), 1)
-            else:
-                attention_mask = torch.zeros((L, L), dtype=torch.bool, device=user_hist.device)
-        try:
-            transformer_input = batch['input_weight'] * (seq_embs + position_embs)
-        except:
-            transformer_input = seq_embs + position_embs
-        transformer_out = self.transformer_layer(
-            src=self.dropout(transformer_input),
-            mask=attention_mask,
-            src_key_padding_mask=mask4padding)  # BxLxD
-        if not need_pooling:
-            return transformer_out
-        else:
-            if self.training:
-                return self.training_pooling_layer(transformer_out, batch['seqlen'])
-            else:
-                return self.eval_pooling_layer(transformer_out, batch['seqlen'])
-
-class SASRec3(BaseModel):
+class SASRec5(BaseModel):
     def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
         super().__init__(config, dataset_list)
         self.query_encoder = SASRecQueryEncoder(
@@ -88,20 +24,30 @@ class SASRec3(BaseModel):
             config['model']['layer_num'],
             self.item_embedding,
         )
-        self.quantizer = VectorQuantizer(
-            self.embed_dim,
-            self.embed_dim,
-            K=self.config['model']['K'],
-            beta=0.25,
-            depth=self.config['model']['depth'],
+        self.query_encoder_twin = deepcopy(self.query_encoder)
+        for param in self.query_encoder_twin.parameters():
+            param.requires_grad = False
+        self.condition_proj = nn.Sequential(
+            nn.Linear(self.embed_dim, self.embed_dim),
+            nn.ReLU(),
+            nn.Linear(self.embed_dim, 10 * self.embed_dim)
         )
+        # self.condition_proj = nn.Linear(self.embed_dim, 10 * self.embed_dim)
 
     def current_epoch_trainloaders(self, nepoch):
         return super().current_epoch_trainloaders(nepoch)
 
     def forward(self, batch, need_pooling=True):
-        query = self.query_encoder(batch, need_pooling)
-        _, query_q, _, _, _ = self.quantizer(query)
+        query = self.query_encoder(batch, need_pooling=True)
+        B, D = query.shape
+        query_c = self.condition_proj(query).reshape(B, 10, D)
+        self.query_encoder_twin.load_state_dict(self.query_encoder.state_dict())
+        batch = {
+            'seq_emb': query_c,
+            'seqlen': 10 * torch.ones(B, dtype=torch.int64, device=self.device),
+        }
+        query_q = self.query_encoder_twin(batch, need_pooling=True)
+        self.query = query
         return query_q
 
     @staticmethod
@@ -116,18 +62,17 @@ class SASRec3(BaseModel):
 
     def training_step(self, batch, reduce=True, return_query=False):
         # loss_value, query = super().training_step(batch, reduce=True, return_query=True)
-        query = self.query_encoder(batch, need_pooling=True)
-        embedding_loss, query_q, perplexity, _, _ = self.quantizer(query)
+        query_q = self.forward(batch)
         alignment = 0
-        # alignment += self.alignment(query, query_q)
+        # alignment += self.alignment(self.query, query_q)
         # alignment += 0.5 * self.alignment(query, self.item_embedding.weight[batch[self.fiid]])
         alignment += self.alignment(query_q, self.item_embedding.weight[batch[self.fiid]])
         uniformity = self.config['model']['uniformity'] * (
-            self.uniformity(query) +
+            self.uniformity(self.query) +
             self.uniformity(query_q) +
             self.uniformity(self.item_embedding.weight[batch[self.fiid]])
         )
-        loss_value = alignment + uniformity + embedding_loss
+        loss_value = alignment + uniformity
         return loss_value
 
     # def training_step(self, batch, reduce=True, return_query=False):

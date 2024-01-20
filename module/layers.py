@@ -2,6 +2,7 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
+from copy import deepcopy
 
 class SeqPoolingLayer(nn.Module):
     def __init__(self, pooling_type='mean', keepdim=False) -> None:
@@ -244,14 +245,104 @@ class VectorQuantizer(nn.Module):
     def __init__(self, dim, N, K, beta=0.25, depth=1, device='cuda'):
         super(VectorQuantizer, self).__init__()
         self.N = N
-        self.K = K
+        self.K = K + 1 # 1 for padding
         self.e_dim = dim // N
         self.beta = beta
         self.depth = depth
 
         data = torch.zeros(N, K, self.e_dim, device=device)
+        # nn.init.normal_(data, std=0.02)
         nn.init.uniform_(data, -1.0 / self.N, 1.0 / self.N)
         self.embedding = nn.Parameter(data)
+        self.pad = torch.zeros(N, 1, self.e_dim, device=device)
+
+    def forward(self, z):
+        """
+        Inputs the output of the encoder network z and maps it to a discrete 
+        one-hot vector that is the index of the closest embedding vector e_j
+
+        z (continuous) -> z_q (discrete)
+
+        z.shape = (batch, channel, height, width)
+
+        quantization pipeline:
+
+            1. get encoder input (B,C,H,W)
+            2. flatten input to (B*H*W,C)
+
+        """
+        if len(z.shape) == 3:
+            B, L, D = z.shape
+            z_flatten = z.flatten(0, 1)
+        else:
+            B, D = z.shape
+            z_flatten = z
+        embedding = torch.cat([self.pad, self.embedding], dim=1)
+        z_residual = z_flatten.reshape(-1, self.N, 1, self.e_dim)
+        z_q = []
+        for _ in range(self.depth):
+            d = torch.cdist(z_residual, embedding).squeeze()
+
+            # find closest encodings
+            min_encoding_indices = torch.argmin(d, dim=-1).unsqueeze(-1)
+            min_encodings = torch.zeros(
+                z_flatten.shape[0],
+                self.N,
+                self.K,
+            ).to(z.device)
+
+            min_encodings = min_encodings.scatter(-1, min_encoding_indices, 1)
+
+            # get quantized latent vectors
+            quantization_emb = torch.einsum('BNK,NKD->BND', min_encodings, embedding)
+            z_residual = z_residual - quantization_emb.unsqueeze(-2)
+            quantization_emb = quantization_emb.flatten(-2, -1)
+            z_q.append(quantization_emb)
+        z_q_residual = torch.stack(z_q, dim=1)
+        if len(z.shape) == 3:
+            z_q_residual = z_q_residual.reshape(B, self.depth, L, D)
+        z_q = z_q_residual.sum(1)
+
+        # compute loss for embedding
+        loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
+            torch.mean((z_q - z.detach()) ** 2)
+        # loss = 0
+        # for d in range(self.depth):
+        #     loss += (z - z_q_residual[:, 0:d+1].sum(1).detach()).pow(2).mean() + \
+        #     self.beta * (z_q_residual[:, 0:d+1].sum(1).detach() - z.detach()).pow(2).mean()
+        # for d in range(self.depth):
+        #     loss += torch.cdist(z, z_q_residual[:, 0:d+1].sum(1).detach()).mean()
+        # loss = torch.cdist(z, z_q.detach()).mean()
+        # loss = torch.mean((z_q.detach()-z)**2)
+        # loss = loss / self.depth
+
+        # preserve gradients
+        z_q = z + (z_q - z).detach()
+
+        # perplexity
+        # e_mean = torch.mean(min_encodings.flatten(0, 1), dim=0)
+        # perplexity = torch.exp(-torch.sum(e_mean * torch.log(e_mean + 1e-10)))
+        perplexity = 0
+
+        return loss, z_q, perplexity, min_encodings, min_encoding_indices
+
+class SeqVectorQuantizer(VectorQuantizer):
+    """
+    Discretization bottleneck part of the VQ-VAE.
+
+    Inputs:
+    - n_e : number of embeddings
+    - e_dim : dimension of embedding
+    - beta : commitment cost used in loss term, beta * ||z_e(x)-sg[e]||^2
+    """
+
+    # def __init__(self, dim, N, L, K, beta=0.25, depth=1, device='cuda'):
+    def __init__(self, dim, N, K, query_encoder, beta=0.25, depth=1,  device='cuda'):
+        super().__init__(dim, N, K, beta, depth, device)
+        self.query_encoder = query_encoder
+        self.query_encoder_twin = deepcopy(self.query_encoder)
+        for param in self.query_encoder_twin.parameters():
+            param.requires_grad = False
 
     def forward(self, z):
         """
@@ -269,8 +360,10 @@ class VectorQuantizer(nn.Module):
 
         """
         B, D = z.shape
+
         z_residual = z.reshape(B, self.N, 1, self.e_dim)
         z_q = []
+        self.query_encoder_twin.load_state_dict(self.query_encoder.state_dict())
         for _ in range(self.depth):
             d = torch.cdist(z_residual, self.embedding).squeeze()
 
@@ -289,15 +382,21 @@ class VectorQuantizer(nn.Module):
             quantization_emb = quantization_emb.flatten(-2, -1)
             z_q.append(quantization_emb)
         z_q_residual = torch.stack(z_q, dim=1)
-        z_q = z_q_residual.sum(1)
+        batch = {
+            'seq_emb': z_q_residual,
+            'seqlen': self.depth * torch.ones(B, dtype=torch.int64, device=z.device),
+        }
+        z_q = self.query_encoder_twin(batch, need_pooling=True)
+        # z_q = z_q_residual.sum(1)
 
         # compute loss for embedding
-        # loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
-        #     torch.mean((z_q - z.detach()) ** 2)
-        loss = 0
-        for d in range(self.depth):
-            loss += torch.cdist(z, z_q_residual[:, 0:d+1].sum(1).detach()).mean()
-        loss = loss / self.depth
+        loss = torch.mean((z_q.detach()-z)**2) + self.beta * \
+            torch.mean((z_q - z.detach()) ** 2)
+        
+        # loss = 0
+        # for d in range(self.depth):
+        #     loss += torch.cdist(z, z_q_residual[:, 0:d+1].sum(1).detach()).mean()
+        # loss = loss / self.depth
 
         # preserve gradients
         z_q = z + (z_q - z).detach()

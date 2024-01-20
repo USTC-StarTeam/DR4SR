@@ -51,9 +51,10 @@ class Selector(nn.Module):
         self.scorer = nn.Sequential(
             nn.Sigmoid(),
         )
-        self.gumbel_selector = SubsetOperator(5, True)
+        # self.gumbel_selector = SubsetOperator(5, True)
         self.alpha = 0.
-        self.tau = nn.Parameter(torch.ones(1, device=config['train']['device']) * 10)
+        # self.tau = nn.Parameter(torch.ones(1, device=config['train']['device']) * 10)
+        self.tau = 10
 
     def forward(self, batch, input_emb, position_emb, query=None):
         user_hist = batch['in_item_id']
@@ -83,15 +84,17 @@ class Selector(nn.Module):
         # self.alpha = self.alpha * 0.999
 
         # -----Gumbel softmax----
-        score = F.gumbel_softmax(logits, tau=torch.clip(self.tau, min=2), dim=-1, hard=True)
+        score = F.gumbel_softmax(logits, tau=self.tau, dim=-1, hard=False)
         # score_hard = (score >= (1 / seq_len.reshape(-1, 1, 1) * 0.2)).float()
         # selection = score_hard + score - score.detach()
         # # selection = self.gumbel_selector(logits.squeeze(), self.tau).unsqueeze(-1)
         selection = score[:, :, 0:1]
-        pattern_mask = batch['user_id'] == 0
-        selection = selection.masked_fill(pattern_mask.reshape(-1, 1, 1), 1)
+        # pattern_mask = batch['user_id'] == 0
+        # selection = selection.masked_fill(pattern_mask.reshape(-1, 1, 1), 1)
         mask = torch.arange(query.shape[1], device=device).unsqueeze(0) >= seq_len.unsqueeze(-1)
         selection = selection.masked_fill(mask.unsqueeze(-1), 0)
+
+        self.tau = max(self.tau * 0.999, 1)
         
         return selection
 
@@ -194,7 +197,7 @@ class MetaModel3(BaseModel):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
                 batch['neg_item'] = self._neg_sampling(batch)
                 self.sub_model.optimizer.zero_grad()
-                training_step_args = {'batch': batch}
+                training_step_args = {'batch': batch, 'align': True}
                 if nepoch > self.config['train']['warmup_epoch']:
                     loss = self.training_step(**training_step_args)
                 else:
@@ -216,7 +219,7 @@ class MetaModel3(BaseModel):
         for batch_idx, batch in enumerate(self.current_epoch_trainloaders(nepoch)):
             batch = {k: v.to(self.device) for k, v in batch.items()}
             batch['neg_item'] = self._neg_sampling(batch)
-            training_step_args = {'batch': batch}
+            training_step_args = {'batch': batch, 'align': False}
             meta_train_loss = meta_train_loss + self.training_step(**training_step_args)
             break
 
@@ -224,7 +227,7 @@ class MetaModel3(BaseModel):
         for batch_idx, batch in enumerate(self.current_epoch_metaloaders(nepoch)):
             batch = {k: v.to(self.device) for k, v in batch.items()}
             batch['neg_item'] = self._neg_sampling(batch)
-            training_step_args = {'batch': batch}
+            training_step_args = {'batch': batch, 'align': False}
             meta_loss = meta_loss + self.sub_model.training_step(**training_step_args)
             break
 
@@ -236,7 +239,7 @@ class MetaModel3(BaseModel):
             return_grads = False,
         )
 
-    def training_step(self, batch, reduce=True, return_query=True):
+    def training_step(self, batch, reduce=True, return_query=True, align=True):
         query = self.sub_model.forward(batch, need_pooling=False)
         batch['input_weight'] = self.meta_module(
             # query,
@@ -245,5 +248,10 @@ class MetaModel3(BaseModel):
             self.sub_model.query_encoder.position_emb,
             query,
         )
-        loss_value = self.sub_model.training_step(batch, reduce=True, return_query=False)
+        loss_value = self.sub_model.training_step(
+            batch,
+            reduce=True,
+            return_query=False,
+            align=align,
+        )
         return loss_value
