@@ -1,0 +1,20 @@
+model:
+  sub_model: 'SASRec'
+  hidden_size: 128
+  layer_num: 2
+  head_num: 2
+  dropout_rate: 0.5
+  activation: 'gelu'
+  layer_norm_eps: 1.0e-12
+  uniformity: 1
+
+train:
+  interval: 30
+  meta_optimizer: adam
+  meta_learning_rate: 1.0e-3
+  meta_weight_decay: 0
+  warmup_epoch: -1
+
+data:
+  dataset_class: 'pattern'
+  train_file: '_new-pure'
