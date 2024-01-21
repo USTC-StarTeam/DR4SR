@@ -37,37 +37,42 @@ class Selector(nn.Module):
             num_layers=2,
         )
         self.dropout = nn.Dropout(0.5)
-        # self.query_transform = nn.Identity()
-        # self.mlp = nn.Sequential(
-        #     MLPModule([
-        #             self.embed_dim,
-        #             self.embed_dim,
-        #         ],
-        #         dropout=0.5,
-        #         activation_func='relu',
-        #     ),
-        #     nn.Linear(self.embed_dim, 2),
-        # )
-        # self.scorer = nn.Sequential(
-        #     nn.Sigmoid(),
-        # )
-        # self.gumbel_selector = SubsetOperator(5, True)
         self.alpha = 0.
-        # self.tau = nn.Parameter(torch.ones(1, device=config['train']['device']) * 10)
         self.tau = 10
-        self.L = 1
+        self.L = 2
         self.condition_proj = nn.Identity()
+        # self.source_trans = nn.Sequential(
+        #     nn.Dropout(),
+        #     nn.Linear(self.embed_dim, self.embed_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(self.embed_dim, self.embed_dim),
+        # )
+        # self.target_trans = nn.Sequential(
+        #     nn.Dropout(),
+        #     nn.Linear(self.embed_dim, self.embed_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(self.embed_dim, self.embed_dim),
+        # )
 
     def forward(self, batch, query):
         B, D = query.shape
         device = query.device
-        query_c = self.condition_proj(query).reshape(B, self.L, D)
+
+        # source_emb = self.source_trans(query)
+        # target_emb = self.target_trans(query)
+        meta_graph = torch.cdist(query, query)
+        _, meta_path = torch.topk(meta_graph, k=self.L, dim=-1, largest=False)
+        meta_path = torch.flip(meta_path, dims=[-1])
+        query_c = query[meta_path]
+
+        query_c = self.condition_proj(query_c).reshape(B, self.L, D)
         query_c = self.dropout(query_c)
         attention_mask = torch.triu(torch.ones((self.L, self.L), dtype=torch.bool, device=device), 1)
         query_q = self.query_encoder_twin(
             src=query_c,
             mask=attention_mask,
         )[:, self.L - 1]
+
         return query_q
 
 class MetaModel5(BaseModel):
@@ -237,6 +242,5 @@ class MetaModel5(BaseModel):
             neg_score = (query_q.unsqueeze(1) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
             pos_score[batch[self.fiid] == 0] = -torch.inf # padding
             loss_value = self.sub_model.loss_fn(pos_score, neg_score, reduce=reduce)
-
 
         return loss_value
