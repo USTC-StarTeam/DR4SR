@@ -14,13 +14,14 @@ from collections import defaultdict
 from model.loss_func import *
 from data.dataset import *
 from typing import Dict, List, Optional, Tuple
-from module.layers import MLPModule
+from module.layers import MLPModule, VectorQuantizer
 
 from model.basemodel import BaseModel
 
 class Selector(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
+        self.config = config
         self.embed_dim = config['model']['embed_dim']
         transformer_encoder = torch.nn.TransformerEncoderLayer(
             d_model=self.embed_dim,
@@ -36,22 +37,49 @@ class Selector(nn.Module):
             encoder_layer=transformer_encoder,
             num_layers=2,
         )
+        self.quantizer = VectorQuantizer(
+            self.embed_dim,
+            self.embed_dim,
+            K=self.config['model']['K'],
+            beta=0.25,
+            depth=self.config['model']['depth'],
+        )
+        # self.source_trans = nn.Sequential(
+        #     nn.Dropout(),
+        #     nn.Linear(self.embed_dim, self.embed_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(self.embed_dim, self.embed_dim),
+        # )
+        # self.target_trans = nn.Sequential(
+        #     nn.Dropout(),
+        #     nn.Linear(self.embed_dim, self.embed_dim),
+        #     nn.ReLU(),
+        #     nn.Linear(self.embed_dim, self.embed_dim),
+        # )
         self.dropout = nn.Dropout(0.5)
         self.alpha = 0.
         self.tau = 10
-        self.L = 2
+        self.L = self.config['model']['L']
         self.condition_proj = nn.Identity()
+
+    def selection(self, x):
+
+        return
 
     def forward(self, batch, query):
         B, D = query.shape
         device = query.device
 
+        _, query_c, _, _, _ = self.quantizer(query)
+
         # source_emb = self.source_trans(query)
         # target_emb = self.target_trans(query)
-        meta_graph = torch.cdist(query, query)
+        source_emb = query_c
+        target_emb = query_c
+        meta_graph = torch.cdist(source_emb, target_emb)
         _, meta_path = torch.topk(meta_graph, k=self.L, dim=-1, largest=False)
         meta_path = torch.flip(meta_path, dims=[-1])
-        query_c = query[meta_path]
+        query_c = query_c[meta_path]
 
         query_c = self.condition_proj(query_c).reshape(B, self.L, D)
         query_c = self.dropout(query_c)
@@ -134,62 +162,53 @@ class MetaModel6(BaseModel):
         return self.dataset_list[0].get_loader()
 
     def current_epoch_metaloaders(self, nepoch):
-        self.dataset_list[0].set_mode('original')
+        self.dataset_list[0].set_mode('all')
         return self.dataset_list[0].get_loader()
 
     def training_epoch(self, nepoch):
         output_list = []
 
         trn_dataloaders = self.current_epoch_trainloaders(nepoch)
-        trn_dataloaders = [trn_dataloaders]
 
-        for loader_idx, loader in enumerate(trn_dataloaders):
-            outputs = []
-            loader = tqdm(
-                loader,
-                total=len(loader),
-                ncols=75,
-                desc=f"Training {nepoch:>5}",
-                leave=False,
-            )
-            for batch_idx, batch in enumerate(loader):
-                batch = {k: v.to(self.device) for k, v in batch.items()}
+        loader = tqdm(
+            trn_dataloaders,
+            total=len(trn_dataloaders),
+            ncols=75,
+            desc=f"Training {nepoch:>5}",
+            leave=False,
+        )
+        outputs = []
+        for batch_idx, batch in enumerate(loader):
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            batch['neg_item'] = self._neg_sampling(batch)
+            training_step_args = {'batch': batch, 'align': True}
+            if nepoch > self.config['train']['warmup_epoch']:
+                loss = self.training_step(**training_step_args)
+            else:
+                loss = self.sub_model.training_step(**training_step_args)
+            self.sub_model.optimizer.zero_grad()
+            loss.backward()
+            self.sub_model.optimizer.step()
+            outputs.append({f"loss_{0}": loss.detach()})
+            self.step_counter += 1
+            if self.step_counter % self.config['train']['interval'] == 0 \
+                and nepoch > self.config['train']['warmup_epoch']:
+                try:
+                    batch = next(self.metaloader_iter)
+                except StopIteration:
+                    self.metaloader_iter = iter(self.current_epoch_metaloaders(nepoch=0))
+                    batch = next(self.metaloader_iter)
                 batch['neg_item'] = self._neg_sampling(batch)
-                self.sub_model.optimizer.zero_grad()
                 training_step_args = {'batch': batch, 'align': True}
                 if nepoch > self.config['train']['warmup_epoch']:
                     loss = self.training_step(**training_step_args)
                 else:
                     loss = self.sub_model.training_step(**training_step_args)
+                self.meta_optimizer.zero_grad()
                 loss.backward()
-                self.sub_model.optimizer.step()
-                outputs.append({f"loss_{loader_idx}": loss.detach()})
-                self.step_counter += 1
-            output_list.append(outputs)
-
-        if nepoch > self.config['train']['warmup_epoch']:
-            for loader_idx, loader in enumerate(trn_dataloaders):
-                outputs = []
-                loader = tqdm(
-                    loader,
-                    total=len(loader),
-                    ncols=75,
-                    desc=f"Meta Training {nepoch:>5}",
-                    leave=False,
-                )
-                for batch_idx, batch in enumerate(loader):
-                    batch = {k: v.to(self.device) for k, v in batch.items()}
-                    batch['neg_item'] = self._neg_sampling(batch)
-                    self.meta_optimizer.zero_grad()
-                    training_step_args = {'batch': batch, 'align': True}
-                    if nepoch > self.config['train']['warmup_epoch']:
-                        loss = self.training_step(**training_step_args)
-                    else:
-                        loss = self.sub_model.training_step(**training_step_args)
-                    loss.backward()
-                    self.meta_optimizer.step()
-                    outputs.append({f"meta_loss_{loader_idx}": loss.detach()})
-                output_list.append(outputs)
+                self.meta_optimizer.step()
+                
+        output_list.append(outputs)
         return output_list
 
     @staticmethod

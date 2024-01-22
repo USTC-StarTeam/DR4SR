@@ -7,12 +7,15 @@ model:
   activation: 'gelu'
   layer_norm_eps: 1.0e-12
   uniformity: 1
+  K: 256
+  depth: 4
+  L: 1
 
 train:
-  interval: 30
-  meta_optimizer: adam
+  interval: 1
+  meta_optimizer: sgd
   meta_learning_rate: 1.0e-3
-  meta_weight_decay: 0
+  meta_weight_decay: 1.e-3
   warmup_epoch: -1
 
 data:
