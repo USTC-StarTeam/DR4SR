@@ -104,7 +104,7 @@ class SASRec(BaseModel):
     @staticmethod
     def uniformity(x):
         x = F.normalize(x, dim=-1)
-        return torch.norm(x[:, None] - x, dim=2, p=2).pow(2).mul(-2).exp().mean().log()
+        # return torch.norm(x[:, None] - x, dim=2, p=2).pow(2).mul(-2).exp().mean().log()
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
     def training_step(self, batch, reduce=True, return_query=False, align=True):

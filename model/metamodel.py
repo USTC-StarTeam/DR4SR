@@ -24,6 +24,7 @@ class MetaModel(BaseModel):
         self.step_counter = 0
         self.item_embedding = None # MetaModel is just a trainer without item embedding
         self.tau = nn.Parameter(torch.ones(1, device=self.device) * 10)
+        self.counter = 0
 
     def _init_model(self, train_data):
         self.sub_model : BaseModel = self._register_sub_model()
@@ -103,7 +104,7 @@ class MetaModel(BaseModel):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
                 batch['neg_item'] = self._neg_sampling(batch)
                 self.sub_model.optimizer.zero_grad()
-                training_step_args = {'batch': batch}
+                training_step_args = {'batch': batch, 'align': False}
                 if nepoch > self.config['train']['warmup_epoch']:
                     loss = self.training_step(**training_step_args)
                 else:
@@ -123,14 +124,14 @@ class MetaModel(BaseModel):
         batch = next(metaloader_iter)
         batch = {k: v.to(self.device) for k, v in batch.items()}
         batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch}
+        training_step_args = {'batch': batch, 'align': False}
         meta_loss = self.sub_model.training_step(**training_step_args)
 
         trainloader = self.current_epoch_trainloaders(nepoch)
         batch = next(iter(trainloader))
         batch = {k: v.to(self.device) for k, v in batch.items()}
         batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch}
+        training_step_args = {'batch': batch, 'align': False}
         meta_train_loss = self.training_step(**training_step_args)
 
         self.meta_optimizer.step(
@@ -145,18 +146,23 @@ class MetaModel(BaseModel):
         logits = self.meta_module(query)
         # logits = F.softmax(logits, dim=0)
         # logits = torch.sigmoid(logits)
-        logits = F.gumbel_softmax(logits, tau=torch.clip(self.tau, min=1), dim=-1, hard=False)[:, 0]
+        logits = F.gumbel_softmax(logits, tau=torch.clip(self.tau, min=self.config['model']['tau_min']), dim=-1, hard=False)[:, 0]
         return logits.squeeze()
 
-    def training_step(self, batch, reduce=True, return_query=True):
-        loss_value = self.sub_model.training_step(batch, reduce=False, return_query=False)
+    def training_step(self, batch, reduce=True, return_query=True, align=False):
+        loss_value = self.sub_model.training_step(batch, reduce=False, return_query=False, align=False)
         query = self.sub_model.forward(batch)
         weight = self.selection(query)
         # weight = self.selection(query) * query.shape[0]
         mask = batch['user_id'] == 0
         weight = weight.masked_fill(mask, 1)
+        if self.counter % 500 == 0:
+            torch.set_printoptions(precision=3, sci_mode=False)
+            print(weight)
+            torch.set_printoptions(precision=4, sci_mode=False)
+        self.counter += 1
         loss_value = (loss_value * weight).sum()
         return loss_value
-    
+
     def evaluate(self) -> Dict:
         return super().evaluate()

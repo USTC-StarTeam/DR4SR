@@ -5,6 +5,7 @@ model:
   head_num: 2
   dropout_rate: 0.5
   activation: 'gelu'
+  tau_min: 1
   layer_norm_eps: 1.0e-12
 
 train:
@@ -14,4 +15,5 @@ train:
   hpo_learning_rate: 1
   meta_weight_decay: 2
   descent_step: 30
-  warmup_epoch: -1
+  warmup_epoch: 10
+  early_stop_patience: 20
