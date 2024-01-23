@@ -1,11 +1,12 @@
 model:
-  sub_model: 'SASRec'
+  sub_model: 'SASRec8'
   hidden_size: 128
   layer_num: 2
   head_num: 2
   dropout_rate: 0.5
   activation: 'gelu'
   layer_norm_eps: 1.0e-12
+  H: 5
 
 train:
   interval: 30
@@ -14,7 +15,7 @@ train:
   hpo_learning_rate: 1
   meta_weight_decay: 2
   descent_step: 30
-  warmup_epoch: -1
+  warmup_epoch: 10
 
 data:
   dataset_class: 'pattern'

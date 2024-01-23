@@ -17,95 +17,7 @@ from typing import Dict, List, Optional, Tuple
 from module.layers import MLPModule
 
 from model.basemodel import BaseModel
-
-class Selector(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.embed_dim = config['model']['embed_dim']
-        # transformer_encoder = torch.nn.TransformerEncoderLayer(
-        #     d_model=self.embed_dim,
-        #     nhead=2,
-        #     dim_feedforward=4 * self.embed_dim,
-        #     dropout=0.5,
-        #     activation='gelu',
-        #     layer_norm_eps=1e-12,
-        #     batch_first=True,
-        #     norm_first=False
-        # )
-        # self.transformer_layer = torch.nn.TransformerEncoder(
-        #     encoder_layer=transformer_encoder,
-        #     num_layers=1,
-        # )
-        self.dropout = nn.Dropout(0.5)
-        self.query_transform = nn.Identity()
-        self.mlp = nn.Sequential(
-            MLPModule([
-                    self.embed_dim,
-                    self.embed_dim,
-                ],
-                dropout=0.5,
-                activation_func='relu',
-            ),
-            nn.Linear(self.embed_dim, 2),
-        )
-        self.scorer = nn.Sequential(
-            nn.Sigmoid(),
-        )
-        # self.gumbel_selector = SubsetOperator(5, True)
-        self.alpha = 0.
-        # self.tau = nn.Parameter(torch.ones(1, device=config['train']['device']) * 10)
-        self.tau = 10
-
-    def forward(self, batch, input_emb, position_emb, query=None):
-        user_hist = batch['in_item_id']
-        seq_len = batch['seqlen']
-        device = input_emb.weight.device
-        L = user_hist.shape[1]
-        if query is None:
-            positions = torch.arange(user_hist.size(1), dtype=torch.long, device=device)
-            positions = positions.unsqueeze(0).expand_as(user_hist)
-            position_embs = position_emb(positions)
-            seq_embs = input_emb(user_hist)
-            query = self.dropout(position_embs + seq_embs)
-            mask4padding = user_hist == 0
-            attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=device), 1)
-            query = self.transformer_layer(
-                src=query,
-                mask=attention_mask,
-                src_key_padding_mask=mask4padding,
-            )
-
-        logits = self.mlp(query) # [B, L, 2]
-
-        # -------Sigmoid---------
-        # score = self.scorer(logits) + self.alpha
-        # score_hard = (score >= 0.49).float()
-        # selection = score_hard + score - score.detach()
-        # self.alpha = self.alpha * 0.999
-
-        # -----Gumbel softmax----
-        score = F.gumbel_softmax(logits, tau=self.tau, dim=-1, hard=False)
-        # score_hard = (score >= (1 / seq_len.reshape(-1, 1, 1) * 0.2)).float()
-        # selection = score_hard + score - score.detach()
-        # # selection = self.gumbel_selector(logits.squeeze(), self.tau).unsqueeze(-1)
-        selection = score[:, :, 0:1]
-        # pattern_mask = batch['user_id'] == 0
-        # selection = selection.masked_fill(pattern_mask.reshape(-1, 1, 1), 1)
-        mask = torch.arange(query.shape[1], device=device).unsqueeze(0) >= seq_len.unsqueeze(-1)
-        selection = selection.masked_fill(mask.unsqueeze(-1), 0)
-
-        self.tau = max(self.tau * 0.999, 1)
-        
-        return selection
-
-        logits = self.meta_module(query).squeeze()
-        mask = torch.arange(query.shape[1], device=self.device).unsqueeze(0) >= seq_len.unsqueeze(-1)
-        logits = logits.masked_fill(mask, -torch.inf)
-        rst = []
-        # rst = self._multi_round_gumbel(logits, 10, self.tau)
-        rst = self.gumbel_selector(logits, self.tau) * seq_len.unsqueeze(1) / self.max_seq_len
-        self.tau = max(self.tau * self.annealing_factor, 1)
-        return rst
+from torch.distributions import Bernoulli
 
 class MetaModel3(BaseModel):
     def __init__(self, config: Dict, dataset_list: List[PatternDataset]) -> None:
@@ -115,6 +27,8 @@ class MetaModel3(BaseModel):
         self.item_embedding = None # MetaModel is just a trainer without item embedding
         self.tau = 10
         self.annealing_factor = 0.9999
+        self.H = config['model']['H']
+        self.alpha = 0.3
 
     def _init_model(self, train_data):
         self.sub_model : BaseModel = self._register_sub_model()
@@ -141,7 +55,12 @@ class MetaModel3(BaseModel):
         return model_class(sub_model_config, self.dataset_list)
 
     def _register_meta_modules(self) -> nn.Module:
-        return Selector(self.config)
+        return MLPModule([
+            self.embed_dim,
+            self.embed_dim,
+            self.embed_dim,
+            self.H * 2,
+        ], dropout=0.5, last_activation=False)
 
     def _get_meta_optimizers(self):
         opt_name = self.config['train']['meta_optimizer']
@@ -167,15 +86,78 @@ class MetaModel3(BaseModel):
 
         return optimizer
 
+    def get_attention_mask(self, item_seq, bidirectional=False):
+        """Generate left-to-right uni-directional or bidirectional attention mask for multi-head attention."""
+        attention_mask = item_seq != 0
+        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)  # torch.bool
+        if not bidirectional:
+            extended_attention_mask = torch.tril(
+                extended_attention_mask.expand((-1, -1, item_seq.size(-1), -1))
+            )
+        extended_attention_mask = torch.where(extended_attention_mask, 0.0, -10000.0)
+        return extended_attention_mask
+
+    def generate_pattern(self, batch):
+        def find_last_nonezero(x):
+            idx = torch.arange(self.max_seq_len, device=self.device)
+            tmp2 = torch.einsum("abc,b->abc", (x, idx))
+            indices = torch.argmax(tmp2, dim=1, keepdim=True)
+            return indices + 1
+        def binarize(x, seq_len):
+            x = torch.clamp(x, min=0, max=1)
+            d = Bernoulli(x)
+            rst = d.sample()
+            mask = torch.arange(x.shape[1], device=self.device).unsqueeze(0) >= \
+                seq_len.unsqueeze(-1)
+            rst = rst.masked_fill(mask.unsqueeze(-1), 0)
+            return rst + x - x.detach()
+        seq_embs = self.item_embedding(batch['in_' + self.fiid]) # BLD
+        B, L, D = seq_embs.shape
+
+        logits = self.meta_module(seq_embs).reshape(B, L, self.H, 2) # BLH2
+        logits = F.softmax(logits, dim=-1)[..., 0]# BLH
+
+        # logits = self.meta_module(seq_embs)
+
+        logits = logits + self.alpha
+        self.alpha = max(self.alpha * 0.999, 0.5)
+        selection = binarize(logits, batch['seqlen']) # BLH
+        self.selection = selection
+        user_emb = selection.unsqueeze(-1) * seq_embs.unsqueeze(-2) # BLHD
+        user_emb = user_emb.permute(0, 2, 1, 3) # BHLD
+        user_emb = user_emb.flatten(0, 1) # (B*H)LD
+
+        # att_mask = self.get_attention_mask(selection.permute(0, 2, 1).flatten(0, 1))
+        att_mask = self.get_attention_mask(batch['in_' + self.fiid]).repeat_interleave(repeats=self.H, dim=0)
+        new_seq_len = find_last_nonezero(selection).flatten()
+        self.log_value = ((batch['seqlen'].unsqueeze(-1) - selection.sum(1)) / batch['seqlen'].unsqueeze(-1))
+        return user_emb, att_mask, new_seq_len
+
+    def merge_pattern(self, pattern, method='mean'):
+        # pattern: [B, H, D]
+        if method == 'sum':
+            rst = pattern.reshape(-1, self.H, self.embed_dim)
+            rst = rst.sum(1)
+        elif method == 'mean':
+            rst = pattern.reshape(-1, self.H, self.embed_dim)
+            rst = rst.mean(1)
+        return rst
+
     def forward(self, batch):
-        return self.sub_model.forward(batch)
+        pattern, att_mask, last_seq_len = self.generate_pattern(batch)
+        batch['pattern'] = pattern
+        batch['att_mask'] = att_mask
+        batch['seqlen'] = last_seq_len
+        query = self.sub_model.forward(batch, need_pooling=True)
+        query = self.merge_pattern(query)
+        return query
 
     def current_epoch_trainloaders(self, nepoch):
         self.dataset_list[0].set_mode('all')
         return self.dataset_list[0].get_loader()
 
     def current_epoch_metaloaders(self, nepoch):
-        self.dataset_list[0].set_mode('original')
+        self.dataset_list[0].set_mode('all')
         return self.dataset_list[0].get_loader()
 
     def training_epoch(self, nepoch):
@@ -197,7 +179,7 @@ class MetaModel3(BaseModel):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
                 batch['neg_item'] = self._neg_sampling(batch)
                 self.sub_model.optimizer.zero_grad()
-                training_step_args = {'batch': batch, 'align': True}
+                training_step_args = {'batch': batch, 'align': False}
                 if nepoch > self.config['train']['warmup_epoch']:
                     loss = self.training_step(**training_step_args)
                 else:
@@ -211,6 +193,8 @@ class MetaModel3(BaseModel):
                     self._outter_loop(nepoch)
                     self.dataset_list[0].set_mode('all')
             output_list.append(outputs)
+        if nepoch > self.config['train']['warmup_epoch']:
+            print(self.log_value.mean(1).mean())
         return output_list
 
     def _outter_loop(self, nepoch):
@@ -239,19 +223,10 @@ class MetaModel3(BaseModel):
             return_grads = False,
         )
 
-    def training_step(self, batch, reduce=True, return_query=True, align=True):
-        query = self.sub_model.forward(batch, need_pooling=False)
-        batch['input_weight'] = self.meta_module(
-            # query,
-            batch,
-            self.sub_model.item_embedding,
-            self.sub_model.query_encoder.position_emb,
-            query,
-        )
-        loss_value = self.sub_model.training_step(
-            batch,
-            reduce=True,
-            return_query=False,
-            align=align,
-        )
+    def training_step(self, batch, reduce=True, return_query=True, align=False):
+        query = self.forward(batch)
+        pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
+        neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
+        pos_score[batch[self.fiid] == 0] = -torch.inf # padding
+        loss_value = self.sub_model.loss_fn(pos_score, neg_score, reduce=reduce)
         return loss_value

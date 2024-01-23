@@ -204,7 +204,7 @@ class BaseModel(nn.Module):
     def training_step(self, batch, reduce=True, return_query=False):
         query = self.forward(batch)
         pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
-        neg_score = (query.unsqueeze(1) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
+        neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
         pos_score[batch[self.fiid] == 0] = -torch.inf # padding
 
         loss_value = self.loss_fn(pos_score, neg_score, reduce=reduce)
