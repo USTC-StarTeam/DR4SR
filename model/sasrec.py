@@ -10,7 +10,7 @@ from copy import deepcopy
 class SASRecQueryEncoder(torch.nn.Module):
     def __init__(
             self, fiid, embed_dim, max_seq_len, n_head, hidden_size, dropout, activation, layer_norm_eps, n_layer, item_encoder,
-            bidirectional=False, training_pooling_type='last', eval_pooling_type='last') -> None:
+            bidirectional=False, training_pooling_type='origin', eval_pooling_type='last') -> None:
         super().__init__()
         self.fiid = fiid
         self.item_encoder = item_encoder
@@ -107,7 +107,7 @@ class SASRec(BaseModel):
         # return torch.norm(x[:, None] - x, dim=2, p=2).pow(2).mul(-2).exp().mean().log()
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
-    def training_step(self, batch, reduce=True, return_query=False, align=True):
+    def training_step(self, batch, reduce=True, return_query=False, align=False):
         if align:
             query = self.query_encoder(batch, need_pooling=True)
             alignment = self.alignment(query, self.item_embedding.weight[batch[self.fiid]])

@@ -8,11 +8,6 @@ import numpy as np
 import random
 from tqdm import tqdm
 from argparse import ArgumentParser
-
-num_item = 11925
-SOS = 11925
-EOS = 11926
-
 from utils import normal_initialization
 from module.layers import SeqPoolingLayer
 
@@ -30,7 +25,7 @@ class ConditionEncoder(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(
             encoder_layer=transformer_layer,
-            num_layers=1,
+            num_layers=2,
         )
         self.condition_layer = nn.Sequential(
             nn.Linear(64, 64),
@@ -39,7 +34,7 @@ class ConditionEncoder(nn.Module):
         )
         self.condition_emb = nn.Embedding(K, 64)
         self.pooling_layer = SeqPoolingLayer('mean')
-        self.tau = 5
+        self.tau = 1
 
     def forward(self, trm_input, src_mask, memory_key_padding_mask, src_seqlen):
         trm_out = self.encoder(
@@ -50,13 +45,15 @@ class ConditionEncoder(nn.Module):
         trm_out = self.pooling_layer(trm_out, src_seqlen) # BD
         condition = self.condition_layer(trm_out) # BK
         condition = F.gumbel_softmax(condition, tau=self.tau, dim=-1) # BK
-        self.tau = max(self.tau * 0.999, 0.2)
+        self.condition4loss = condition
+        self.tau = max(self.tau * 0.995, 0.1)
         rst = condition @ self.condition_emb.weight # BD
         return rst.unsqueeze(1)
 
 class Generator(nn.Module):
     def __init__(self) -> None:
         super().__init__()
+        self.item_embedding = nn.Embedding(num_item + 2, 64, padding_idx=0)
         self.item_embedding_decoder = nn.Embedding(num_item + 2, 64, padding_idx=0)
         self.transformer = nn.Transformer(
             d_model=64,
@@ -74,7 +71,7 @@ class Generator(nn.Module):
         self.condition_encoder = ConditionEncoder(5)
         self.device = 'cuda'
         self.apply(normal_initialization)
-        self.load_pretrained()
+        # self.load_pretrained()
 
     def load_pretrained(self):
         # path = 'saved/SASRec8/amazon-toys-seq-noise-50/2024-01-24-16-37-41-603118.ckpt'
@@ -86,6 +83,13 @@ class Generator(nn.Module):
             nn.init.normal_(torch.zeros(2, 64), std=0.02)
         ])
         self.item_embedding = nn.Embedding.from_pretrained(pretrained, padding_idx=0, freeze=False)
+        self.item_embedding_decoder = self.item_embedding
+
+    def condition_mask(self, logits, src):
+        mask = torch.zeros_like(logits, device=logits.device, dtype=torch.bool)
+        mask = mask.scatter(-1, src.unsqueeze(-2).repeat(1, mask.shape[1], 1), 1)
+        logits = torch.masked_fill(logits, ~mask, -torch.inf)
+        return logits
 
     def forward(self, src, tgt, src_mask, tgt_mask,
             src_padding_mask,
@@ -113,8 +117,10 @@ class Generator(nn.Module):
             src_emb, tgt_emb, src_mask, tgt_mask, None,
             src_padding_mask, tgt_padding_mask, memory_key_padding_mask
         )
+        logits = outs @ self.item_embedding_decoder.weight.T
+        logits = self.condition_mask(logits, src)
 
-        return outs @ self.item_embedding_decoder.weight.T
+        return logits
     
     def encode(self, src, src_mask):
         position_ids = torch.arange(src.size(1), dtype=torch.long, device=self.device)
@@ -142,6 +148,7 @@ class Generator(nn.Module):
             # only SOS in
             tgt_emb = self.dropout(con_emb + tgt_position_embedding)
         else:
+            # replace SOS with Condition embedding
             tgt_emb = self.dropout(
                 torch.cat([con_emb, self.item_embedding(tgt[:, 1:])], dim=1) + \
                 tgt_position_embedding
@@ -159,12 +166,19 @@ def create_mask(src, tgt):
     tgt_seq_len = tgt.shape[1]
 
     tgt_mask = generate_square_subsequent_mask(tgt_seq_len)
-    src_mask = torch.zeros((src_seq_len, src_seq_len),device='cuda').type(torch.bool)
+    src_mask = generate_square_subsequent_mask(src_seq_len)
 
     src_padding_mask = (src == 0)
     tgt_padding_mask = (tgt == 0)
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
 
+
+def inference_mask(logits, src, ys):
+    mask = torch.zeros_like(logits, device=logits.device, dtype=torch.bool)
+    mask = mask.scatter(-1, src, 1)
+    mask = mask.scatter(-1, ys, 0)
+    logits = torch.masked_fill(logits, ~mask, -torch.inf)
+    return logits
 
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     src = src.to('cuda')
@@ -178,6 +192,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
                     .type(torch.bool)).to('cuda')
         out = model.decode(ys, memory, tgt_mask)
         prob = out[:, -1] @ model.item_embedding_decoder.weight.T
+        prob = inference_mask(prob, src, ys)
         _, next_word = torch.max(prob, dim=-1)
         next_word = next_word.item()
 
@@ -187,7 +202,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
             break
     return ys
 
-def translate(model, src):
+def translate(model: torch.nn.Module, src):
     model.eval()
     src = src.reshape(1, -1)
     num_tokens = src.shape[1]
@@ -198,29 +213,40 @@ def translate(model, src):
 
 parser = ArgumentParser()
 parser.add_argument('--begin', '-b', type=int, default=0, help='model name')
-parser.add_argument('--end', '-e', type=int, default=5000, help='dataset name')
+parser.add_argument('--end', '-e', type=int, default=1, help='dataset name')
 parser.add_argument('--condition', '-c', type=int, default=0, help='dataset name')
 args = parser.parse_args()
-begin = args.begin
-end = args.end
+begin = args.begin * 5000
+end = args.end * 5000
 condition = args.condition
 
+dataset_name = 'beauty'
+full_dataset_name = 'amazon-beauty'
+num_item_dict = {
+    'toy': 11925,
+    'sport': 18358,
+    'beauty':12102,
+}
+path = f'./{dataset_name}-pair.pth'
+data = torch.load(path)
+num_item = num_item_dict[dataset_name]
+SOS = num_item
+EOS = num_item + 1
 
 model = Generator().to('cuda')
-model.set_condition(condition)
-model.load_state_dict(torch.load('./translator-toy-con.pth'))
+model.load_state_dict(torch.load(f'./translator-{dataset_name}-con.pth'))
 
 def preprocess(seq):
     return torch.tensor([SOS] + seq + [EOS], device='cuda')
-original_data = torch.load('./dataset/amazon-toys-noise-50/toy/train_ori.pth')
+original_data = torch.load(f'./dataset/{full_dataset_name}-noise-50/{dataset_name}/train_ori.pth')
 seqlist = [_[1][:_[3]] + [_[2][_[3] - 1]] for _ in original_data]
 seqlist = [preprocess(_) for _ in seqlist]
 
-
-
 filtered_sequences = []
-for seq in tqdm(seqlist[begin:end]):
-    rst = translate(model, seq)
-    filtered_sequences.append(seq)
+for i in range(5):
+    model.set_condition(condition)
+    for seq in tqdm(seqlist[begin:end]):
+        rst = translate(model, seq)
+        filtered_sequences.append(seq)
 
-torch.save(filtered_sequences, f'./f-seq-con-toys-{condition}-{begin}-{end}.pth')
+torch.save(filtered_sequences, f'./f-seq-con-{dataset_name}-{begin}-{end}.pth')
