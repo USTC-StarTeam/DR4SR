@@ -22,20 +22,20 @@ class Selector(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.embed_dim = config['model']['embed_dim']
-        transformer_encoder = torch.nn.TransformerEncoderLayer(
-            d_model=self.embed_dim,
-            nhead=2,
-            dim_feedforward=2 * self.embed_dim,
-            dropout=0.5,
-            activation='gelu',
-            layer_norm_eps=1e-12,
-            batch_first=True,
-            norm_first=False
-        )
-        self.query_encoder_twin = torch.nn.TransformerEncoder(
-            encoder_layer=transformer_encoder,
-            num_layers=2,
-        )
+        # transformer_encoder = torch.nn.TransformerEncoderLayer(
+        #     d_model=self.embed_dim,
+        #     nhead=2,
+        #     dim_feedforward=2 * self.embed_dim,
+        #     dropout=0.5,
+        #     activation='gelu',
+        #     layer_norm_eps=1e-12,
+        #     batch_first=True,
+        #     norm_first=False
+        # )
+        # self.query_encoder_twin = torch.nn.TransformerEncoder(
+        #     encoder_layer=transformer_encoder,
+        #     num_layers=2,
+        # )
         self.dropout = nn.Dropout(0.5)
         self.alpha = 0.
         self.tau = 10
@@ -53,27 +53,41 @@ class Selector(nn.Module):
         #     nn.ReLU(),
         #     nn.Linear(self.embed_dim, self.embed_dim),
         # )
+        self.selector = nn.Sequential(
+            nn.Linear(self.embed_dim, self.embed_dim),
+            nn.ReLU(),
+            nn.Linear(self.embed_dim, 2),
+        )
+
+    def selection(self, query):
+        logits = self.selector(query)
+        logits = F.gumbel_softmax(logits, tau=self.tau, dim=-1, hard=False)[:, 0]
+        self.tau = min(self.tau * 0.999, 2)
+        return logits.squeeze()
 
     def forward(self, batch, query):
         B, D = query.shape
         device = query.device
 
-        # source_emb = self.source_trans(query)
-        # target_emb = self.target_trans(query)
-        meta_graph = torch.cdist(query, query)
-        _, meta_path = torch.topk(meta_graph, k=self.L, dim=-1, largest=False)
-        meta_path = torch.flip(meta_path, dims=[-1])
-        query_c = query[meta_path]
+        loss_weight = self.selection(query)
+        query_q = query
 
-        query_c = self.condition_proj(query_c).reshape(B, self.L, D)
-        query_c = self.dropout(query_c)
-        attention_mask = torch.triu(torch.ones((self.L, self.L), dtype=torch.bool, device=device), 1)
-        query_q = self.query_encoder_twin(
-            src=query_c,
-            mask=attention_mask,
-        )[:, self.L - 1]
+        # # source_emb = self.source_trans(query)
+        # # target_emb = self.target_trans(query)
+        # meta_graph = torch.cdist(query, query)
+        # _, meta_path = torch.topk(meta_graph, k=self.L, dim=-1, largest=False)
+        # meta_path = torch.flip(meta_path, dims=[-1])
+        # query_c = query[meta_path]
 
-        return query_q
+        # query_c = self.condition_proj(query_c).reshape(B, self.L, D)
+        # query_c = self.dropout(query_c)
+        # attention_mask = torch.triu(torch.ones((self.L, self.L), dtype=torch.bool, device=device), 1)
+        # query_q = self.query_encoder_twin(
+        #     src=query_c,
+        #     mask=attention_mask,
+        # )[:, self.L - 1]
+
+        return query_q, loss_weight
 
 class MetaModel5(BaseModel):
     def __init__(self, config: Dict, dataset_list: List[PatternDataset]) -> None:
@@ -138,10 +152,11 @@ class MetaModel5(BaseModel):
     def forward(self, batch):
         query = self.sub_model.forward(batch, need_pooling=True)
         self.query = query
-        query_q = self.meta_module(
+        query_q, loss_weight = self.meta_module(
             batch,
             query,
         )
+        self.loss_weight = loss_weight
         return query_q
 
     def current_epoch_trainloaders(self, nepoch):
@@ -149,7 +164,7 @@ class MetaModel5(BaseModel):
         return self.dataset_list[0].get_loader()
 
     def current_epoch_metaloaders(self, nepoch):
-        self.dataset_list[0].set_mode('original')
+        self.dataset_list[0].set_mode('all')
         return self.dataset_list[0].get_loader()
 
     def training_epoch(self, nepoch):
@@ -185,6 +200,9 @@ class MetaModel5(BaseModel):
                     self._outter_loop(nepoch)
                     self.dataset_list[0].set_mode('all')
             output_list.append(outputs)
+        torch.set_printoptions(precision=3, sci_mode=False)
+        print(self.loss_weight)
+        torch.set_printoptions(precision=4, sci_mode=False)
         return output_list
 
     def _outter_loop(self, nepoch):
@@ -214,12 +232,15 @@ class MetaModel5(BaseModel):
         )
 
     @staticmethod
-    def alignment(x, y):
+    def alignment(x, y, reduce=True):
         x, y = F.normalize(x, dim=-1), F.normalize(y, dim=-1)
-        return (x - y).norm(p=2, dim=1).pow(2).mean()
+        if reduce:
+            return (x - y).norm(p=2, dim=1).pow(2).mean()
+        else:
+            return (x - y).norm(p=2, dim=1).pow(2)
 
     @staticmethod
-    def uniformity(x):
+    def uniformity(x, reduce=True):
         x = F.normalize(x, dim=-1)
         # return torch.norm(x[:, None] - x, dim=2, p=2).pow(2).mul(-2).exp().mean().log()
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
@@ -229,8 +250,17 @@ class MetaModel5(BaseModel):
         if align:
             alignment = 0
             # alignment += self.alignment(self.query, query_q)
-            alignment += 0.5 * self.alignment(self.query, self.item_embedding.weight[batch[self.fiid]])
-            alignment += 0.5 * self.alignment(query_q, self.item_embedding.weight[batch[self.fiid]])
+            alignment += self.loss_weight * self.alignment(
+                self.query,
+                self.item_embedding.weight[batch[self.fiid]],
+                reduce=False
+            )
+            alignment += self.loss_weight * self.alignment(
+                query_q,
+                self.item_embedding.weight[batch[self.fiid]],
+                reduce=False
+            )
+            alignment = alignment.mean()
             uniformity = self.config['model']['uniformity'] * (
                 self.uniformity(self.query) +
                 self.uniformity(query_q) +
@@ -241,6 +271,10 @@ class MetaModel5(BaseModel):
             pos_score = (query_q * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
             neg_score = (query_q.unsqueeze(1) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
             pos_score[batch[self.fiid] == 0] = -torch.inf # padding
-            loss_value = self.sub_model.loss_fn(pos_score, neg_score, reduce=reduce)
+            loss_value = self.sub_model.loss_fn(pos_score, neg_score, reduce=False)
+            weight = self.loss_weight
+            mask = batch['user_id'] == 0
+            weight = weight.masked_fill(mask, 1)
+            loss_value = (loss_value * weight).sum()
 
         return loss_value

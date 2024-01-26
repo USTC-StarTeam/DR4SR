@@ -156,6 +156,11 @@ class SASRec7(BaseModel):
 
     def training_step(self, batch, reduce=True, return_query=False):
         query = self.forward(batch)
+        # pos_score = (query * self.item_embedding.weight[batch[self.fiid]]).sum(-1)
+        # neg_score = (query.unsqueeze(-2) * self.item_embedding.weight[batch['neg_item']]).sum(-1)
+        # pos_score[batch[self.fiid] == 0] = -torch.inf # padding
+        # loss_value = self.loss_fn(pos_score, neg_score, reduce=reduce)
+
         embedding_loss = self.embedding_loss
         alignment = 0
         alignment += 0.5 * self.alignment(self.query_q, self.item_embedding.weight[batch[self.fiid]])
@@ -167,7 +172,7 @@ class SASRec7(BaseModel):
         )
         # subspace_reg = F.relu(self.log_value - 0.7).pow(2).mean(1).mean()
         subspace_reg = self.selection.sum(1).mean()
-        loss_value = alignment + uniformity + embedding_loss + 0.005 * subspace_reg
+        loss_value = alignment + uniformity + embedding_loss + 0.007 * subspace_reg
         return loss_value
 
     def training_epoch(self, nepoch):

@@ -23,9 +23,12 @@ class GRU4Rec(BaseModel):
         self.training_pooling_layer = SeqPoolingLayer(pooling_type='origin')
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
 
-    def forward(self, batch):
+    def forward(self, batch, need_pooling=True):
         gru4rec_out = self.query_encoder(batch)
-        if self.training:
-            return self.training_pooling_layer(gru4rec_out, batch['seqlen'])
+        if need_pooling:
+            if self.training:
+                return self.training_pooling_layer(gru4rec_out, batch['seqlen'])
+            else:
+                return self.eval_pooling_layer(gru4rec_out, batch['seqlen'])
         else:
-            return self.eval_pooling_layer(gru4rec_out, batch['seqlen'])
+            return gru4rec_out

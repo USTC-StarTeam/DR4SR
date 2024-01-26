@@ -55,6 +55,12 @@ class MetaModel3(BaseModel):
         return model_class(sub_model_config, self.dataset_list)
 
     def _register_meta_modules(self) -> nn.Module:
+        return nn.Sequential(
+            nn.Linear(self.embed_dim, self.embed_dim),
+            nn.Dropout(.2),
+            nn.LeakyReLU(inplace=True),
+            nn.Linear(self.embed_dim, self.H * 2),
+        )
         return MLPModule([
             self.embed_dim,
             self.embed_dim,

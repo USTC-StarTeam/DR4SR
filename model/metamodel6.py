@@ -70,7 +70,9 @@ class Selector(nn.Module):
         B, D = query.shape
         device = query.device
 
-        _, query_c, _, _, _ = self.quantizer(query)
+        # _, query_c, _, _, _ = self.quantizer(query)
+        query_c = query
+        self.query_c = query_c
 
         # source_emb = self.source_trans(query)
         # target_emb = self.target_trans(query)
@@ -110,7 +112,7 @@ class MetaModel6(BaseModel):
         self.meta_module.apply(normal_initialization)
 
         self.meta_optimizer = self._get_meta_optimizers()
-        self.metaloader_iter = iter(self.current_epoch_metaloaders(nepoch=0))
+        self.metaloader_iter = iter(self.current_epoch_trainloaders(nepoch=0))
 
         self.gumbel_selector = SubsetOperator(k=self.max_seq_len)
 
@@ -158,16 +160,12 @@ class MetaModel6(BaseModel):
         return query_q
 
     def current_epoch_trainloaders(self, nepoch):
-        self.dataset_list[0].set_mode('all')
-        return self.dataset_list[0].get_loader()
-
-    def current_epoch_metaloaders(self, nepoch):
-        self.dataset_list[0].set_mode('all')
         return self.dataset_list[0].get_loader()
 
     def training_epoch(self, nepoch):
         output_list = []
 
+        self.dataset_list[0].set_mode('all')
         trn_dataloaders = self.current_epoch_trainloaders(nepoch)
 
         loader = tqdm(
@@ -180,7 +178,7 @@ class MetaModel6(BaseModel):
         outputs = []
         for batch_idx, batch in enumerate(loader):
             batch = {k: v.to(self.device) for k, v in batch.items()}
-            batch['neg_item'] = self._neg_sampling(batch)
+            # batch['neg_item'] = self._neg_sampling(batch)
             training_step_args = {'batch': batch, 'align': True}
             if nepoch > self.config['train']['warmup_epoch']:
                 loss = self.training_step(**training_step_args)
@@ -193,12 +191,12 @@ class MetaModel6(BaseModel):
             self.step_counter += 1
             if self.step_counter % self.config['train']['interval'] == 0 \
                 and nepoch > self.config['train']['warmup_epoch']:
+                self.dataset_list[0].set_mode('all')
                 try:
                     batch = next(self.metaloader_iter)
                 except StopIteration:
-                    self.metaloader_iter = iter(self.current_epoch_metaloaders(nepoch=0))
+                    self.metaloader_iter = iter(self.current_epoch_trainloaders(nepoch=0))
                     batch = next(self.metaloader_iter)
-                batch['neg_item'] = self._neg_sampling(batch)
                 training_step_args = {'batch': batch, 'align': True}
                 if nepoch > self.config['train']['warmup_epoch']:
                     loss = self.training_step(**training_step_args)
@@ -207,6 +205,7 @@ class MetaModel6(BaseModel):
                 self.meta_optimizer.zero_grad()
                 loss.backward()
                 self.meta_optimizer.step()
+                self.dataset_list[0].set_mode('all')
                 
         output_list.append(outputs)
         return output_list

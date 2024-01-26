@@ -1,4 +1,4 @@
 model:
-  hidden_size: 128
-  dropout_rate: 0.2
+  hidden_size: 256
+  dropout_rate: 0.4
   layer_num: 2

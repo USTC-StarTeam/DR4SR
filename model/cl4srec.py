@@ -47,15 +47,23 @@ class CL4SRec(SASRec):
         super()._init_model(train_data)
         self.augmentation_model = data_augmentation.CL4SRecAugmentation(self.config['model'], train_data)
 
-    def training_step(self, batch, reduce=True, return_query=False):
+    def training_step(self, batch, reduce=True, return_query=False, align=False):
         rst = super().training_step(batch, reduce=reduce, return_query=return_query)
         cl_output = self.augmentation_model(batch, self.query_encoder, reduce=reduce)
         cl_loss = self.config['model']['cl_weight'] * cl_output['cl_loss']
-        if return_query:
-            loss_value, query = rst
-            loss_value += cl_loss
-            return loss_value, query
+        if not reduce:
+            if return_query:
+                loss_value, query = rst
+                return (loss_value, cl_loss), query
+            else:
+                loss_value = rst
+                return loss_value, cl_loss
         else:
-            loss_value = rst + cl_loss
-            return loss_value
+            if return_query:
+                loss_value, query = rst
+                loss_value += cl_loss
+                return loss_value, query
+            else:
+                loss_value = rst + cl_loss
+                return loss_value
 

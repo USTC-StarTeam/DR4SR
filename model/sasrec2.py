@@ -25,25 +25,8 @@ class SASRec2(BaseModel):
             num_layers=model_config['layer_num'],
         )
         self.dropout = torch.nn.Dropout(p=model_config['dropout_rate'])
-        self.training_pooling_layer = SeqPoolingLayer(pooling_type='origin')
+        self.training_pooling_layer = SeqPoolingLayer(pooling_type='last')
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
-
-    def _get_dataset_class():
-        return dataset.SeparateDataset
-        return dataset.MixDataset
-
-    @staticmethod
-    def alignment(x, y):
-        x, y = F.normalize(x, dim=-1), F.normalize(y, dim=-1)
-        return (x - y).norm(p=2, dim=1).pow(2).mean()
-
-    @staticmethod
-    def uniformity(x):
-        x = F.normalize(x, dim=-1)
-        return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
-
-    def get_score(self, query):
-        return query @ self.item_embedding.weight
 
     def forward_eval(self, batch):
         user_hist = batch['in_'+self.fiid]
@@ -65,7 +48,30 @@ class SASRec2(BaseModel):
         else:
             return self.eval_pooling_layer(transformer_out, batch['seqlen'])
 
-    def forward(self, batch):
+    def forward_ori(self, batch, need_pooling=True):
+        user_hist = batch['in_'+self.fiid]
+        positions = torch.arange(user_hist.size(1), dtype=torch.long, device=user_hist.device)
+        positions = positions.unsqueeze(0).expand_as(user_hist)
+        position_embs = self.position_emb(positions)
+        seq_embs = self.item_embedding(user_hist)
+
+        L = user_hist.size(-1)
+        mask4padding = user_hist == 0  # BxL
+        attention_mask = torch.triu(torch.ones((L, L), dtype=torch.bool, device=user_hist.device), 1)
+        transformer_input = seq_embs + position_embs
+        transformer_out = self.transformer_layer(
+            src=self.dropout(transformer_input),
+            mask=attention_mask,
+            src_key_padding_mask=mask4padding)  # BxLxD
+        if not need_pooling:
+            return transformer_out
+        else:
+            if self.training:
+                return self.training_pooling_layer(transformer_out, batch['seqlen'])
+            else:
+                return self.eval_pooling_layer(transformer_out, batch['seqlen'])
+
+    def forward_syn(self, batch, need_pooling=True):
         seq_embs, seq_len = batch['seq_embs'], batch['seqlen']
         positions = torch.arange(seq_embs.size(1), dtype=torch.long, device=self.device)
         positions = positions.unsqueeze(0)
@@ -81,3 +87,9 @@ class SASRec2(BaseModel):
             return self.training_pooling_layer(transformer_out, seq_len)
         else:
             return self.eval_pooling_layer(transformer_out, seq_len)
+
+    def forward(self, batch, need_pooling=True):
+        if batch.get('seq_embs', None) is not None:
+            return self.forward_syn(batch, need_pooling=need_pooling)
+        else:
+            return self.forward_ori(batch, need_pooling=need_pooling)

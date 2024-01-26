@@ -148,8 +148,7 @@ class MetaModel7(BaseModel):
         return logits.squeeze()
 
     def training_step(self, batch, reduce=True, return_query=True, align=False):
-        loss_value = self.sub_model.training_step(batch, reduce=False, return_query=False, align=False)
-        query = self.sub_model.forward(batch, need_pooling=False)
+        loss_value, query = self.sub_model.training_step(batch, reduce=False, return_query=True, align=False)
         weight = self.selection(query)
         # weight = self.selection(query) * query.shape[0]
         mask = batch['user_id'] == 0
@@ -161,7 +160,13 @@ class MetaModel7(BaseModel):
             self.logger.info(weight)
             torch.set_printoptions(precision=4, sci_mode=False)
         self.counter += 1
-        loss_value = (loss_value * weight).sum()
+        if not isinstance(loss_value, tuple):
+            loss_value = (loss_value * weight).sum()
+        else: # For CL4SRec
+            rst = (loss_value[0] * weight).sum()
+            # rst += (loss_value[1] * weight).sum()
+            rst += loss_value[1].sum()
+            loss_value = rst
         return loss_value
 
     def evaluate(self) -> Dict:

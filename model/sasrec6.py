@@ -46,7 +46,7 @@ class SASRec6(BaseModel):
         # query_q = query
 
         query = self.query_encoder(batch, need_pooling=False)
-        batch['input_weight'] = self.selection(query)
+        batch['input_weight'] = self.selection(query, batch)
         query_q = self.query_encoder(batch, need_pooling)
 
         # _, query_q, _, _, _ = self.quantizer(query)
@@ -60,39 +60,31 @@ class SASRec6(BaseModel):
     @staticmethod
     def uniformity(x):
         x = F.normalize(x, dim=-1)
-        return torch.norm(x[:, None] - x, dim=2, p=2).pow(2).mul(-2).exp().mean().log()
-
-        expanded_points1 = x.unsqueeze(1)
-        expanded_points2 = x.unsqueeze(0)
-        distances = torch.sqrt(torch.sum((expanded_points1 - expanded_points2) ** 2, dim=-1))
-        mask = torch.triu(
-            torch.ones(
-                distances.shape[0],
-                distances.shape[0],
-                device=x.device
-            ), diagonal=1
-        ).bool()
-        distances = distances[mask]
-        return distances.pow(2).mul(-2).exp().mean().log()
+        # return torch.norm(x[:, None] - x, dim=2, p=2).pow(2).mul(-2).exp().mean().log()
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
-    def selection(self, query):
+    def selection(self, query, batch):
         # query: [NLD]
+        device = query.device
+        seq_len = batch['seqlen']
         logits = self.selector(query) # NL2
         selection = F.gumbel_softmax(
             logits,
-            tau=1,
+            tau=0.3,
             dim=-1,
             hard=False
         )[:, :, 0:1]
         self.tau = self.tau * 0.999
+        mask = torch.arange(query.shape[1], device=device).unsqueeze(0) >= seq_len.unsqueeze(-1)
+        selection = selection.masked_fill(mask.unsqueeze(-1), 0)
+
         return selection # NLD
 
     def training_step(self, batch, reduce=True, return_query=False):
         # query = self.query_encoder(batch, need_pooling=True)
         # query_q = query
         query = self.query_encoder(batch, need_pooling=False)
-        batch['input_weight'] = self.selection(query)
+        batch['input_weight'] = self.selection(query, batch)
         query_q = self.query_encoder(batch)
         embedding_loss = 0
         # embedding_loss, query_q, perplexity, _, _ = self.quantizer(query)

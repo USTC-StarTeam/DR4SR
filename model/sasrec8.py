@@ -78,7 +78,7 @@ class SASRec8(BaseModel):
         x = F.normalize(x, dim=-1)
         return torch.pdist(x, p=2).pow(2).mul(-2).exp().mean().log()
 
-    def training_step(self, batch, reduce=True, return_query=False, align=False):
+    def training_step(self, batch, reduce=True, return_query=False, align=True):
         if align:
             query = self.forward(batch, need_pooling=True)
             alignment = self.alignment(query, self.item_embedding.weight[batch[self.fiid]])

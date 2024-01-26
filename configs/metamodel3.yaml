@@ -13,7 +13,7 @@ train:
   meta_optimizer: sgd
   meta_learning_rate: 1.0e-3
   hpo_learning_rate: 1
-  meta_weight_decay: 2
+  meta_weight_decay: 0
   descent_step: 30
   warmup_epoch: 10
 

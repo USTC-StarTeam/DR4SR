@@ -7,7 +7,7 @@ model:
   layer_norm_eps: 1.0e-12
   uniformity: 1
   K: 128
-  depth: 4
+  depth: 1
 
 
 train:
