@@ -12,7 +12,7 @@ from copy import deepcopy
 class GNNQueryEncoder(torch.nn.Module):
     def __init__(
             self, fiid, embed_dim, max_seq_len, n_head, hidden_size, dropout, activation, layer_norm_eps, n_layer, item_encoder, graph,
-            bidirectional=False, training_pooling_type='origin', eval_pooling_type='last') -> None:
+            gnn_layer=2, bidirectional=False, training_pooling_type='origin', eval_pooling_type='last') -> None:
         super().__init__()
         self.fiid = fiid
         self.item_encoder = item_encoder
@@ -20,6 +20,7 @@ class GNNQueryEncoder(torch.nn.Module):
         self.training_pooling_type = training_pooling_type
         self.eval_pooling_type = eval_pooling_type
         self.position_emb = torch.nn.Embedding(max_seq_len, embed_dim)
+        self.gnn_layer = gnn_layer
         transformer_encoder = torch.nn.TransformerEncoderLayer(
             d_model=embed_dim,
             nhead=n_head,
@@ -42,7 +43,7 @@ class GNNQueryEncoder(torch.nn.Module):
     def get_gnn_embeddings(self):
         emb = self.item_encoder.weight
         emb_list = [emb]
-        for _ in range(2):
+        for _ in range(self.gnn_layer):
             emb = torch.sparse.mm(self.norm_adj, emb)
             emb_list.append(emb)
         emb = torch.stack(emb_list, dim=1).mean(1)
@@ -76,6 +77,10 @@ class GNNQueryEncoder(torch.nn.Module):
 class GNN(BaseModel):
     def __init__(self, config, dataset_list : list[dataset.BaseDataset]) -> None:
         super().__init__(config, dataset_list)
+        if config['model']['graph'] == 'old':
+            graph = self._build_graph_old()
+        elif config['model']['graph'] == 'new':
+            graph = self._build_graph()
         self.query_encoder = GNNQueryEncoder(
             self.fiid,
             self.embed_dim,
@@ -87,10 +92,11 @@ class GNN(BaseModel):
             config['model']['layer_norm_eps'],
             config['model']['layer_num'],
             self.item_embedding,
-            self._build_graph()
+            graph,
+            config['model']['gnn_layer']
         )
 
-    def _build_graph(self):
+    def _build_graph_old(self):
         # get user seq from validation dataset
         domain = self.dataset_list[1].eval_domain
         history_matrix = self.dataset_list[1].data[domain][1].cpu()
@@ -99,6 +105,41 @@ class GNN(BaseModel):
 
         # build graph
         history_matrix = history_matrix.tolist()
+        row, col, data = [], [], []
+        for idx, item_list_len in enumerate(history_len):
+            # -1 as the validation dataset includes the target item in training dataset
+            item_list_len -= 1
+            # get item_list
+            item_list = history_matrix[idx][:item_list_len]
+            # build graph with sliding window of size 2
+            for item_idx in range(item_list_len - 1):
+                target_num = min(2, item_list_len - item_idx - 1)
+                row += [item_list[item_idx]] * target_num
+                col += item_list[item_idx + 1: item_idx + 1 + target_num]
+                data.append(1 / np.arange(1, 1 + target_num))
+        data = np.concatenate(data)
+        sparse_matrix = sp.csc_matrix((data, (row, col)), shape=(n_items, n_items))
+        sparse_matrix = sparse_matrix + sparse_matrix.T + sp.eye(n_items)
+        degree = np.array((sparse_matrix > 0).sum(1)).flatten()
+        degree = np.nan_to_num(1 / degree, posinf=0)
+        degree = sp.diags(degree)
+        norm_adj = (degree @ sparse_matrix + sparse_matrix @ degree).tocoo()
+        norm_adj = torch.sparse_coo_tensor(
+            np.row_stack([norm_adj.row, norm_adj.col]),
+            norm_adj.data,
+            (n_items, n_items),
+            dtype=torch.float32,
+            device=self.device
+        )
+        return norm_adj
+
+    def _build_graph(self):
+        # get user seq from training dataset
+        history_matrix = self.dataset_list[0].data[1].cpu().tolist()
+        history_len = self.dataset_list[0].data[3].cpu()
+        n_items = self.num_items
+
+        # build graph
         row, col, data = [], [], []
         for idx, item_list_len in enumerate(history_len):
             # -1 as the validation dataset includes the target item in training dataset
