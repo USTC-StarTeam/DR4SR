@@ -32,3 +32,6 @@ class GRU4Rec(BaseModel):
                 return self.eval_pooling_layer(gru4rec_out, batch['seqlen'])
         else:
             return gru4rec_out
+
+    def training_step(self, batch, reduce=True, return_query=False, align=False):
+        return super().training_step(batch, reduce, return_query)

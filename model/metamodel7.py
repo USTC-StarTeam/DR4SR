@@ -120,27 +120,50 @@ class MetaModel7(BaseModel):
         return output_list
 
     def _outter_loop(self, nepoch):
-        metaloader_iter = iter(self.current_epoch_metaloaders(nepoch))
-        batch = next(metaloader_iter)
-        batch = {k: v.to(self.device) for k, v in batch.items()}
-        batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch, 'align': False}
-        meta_loss = self.sub_model.training_step(**training_step_args)
+        if self.config['model']['sub_model'] == 'GRU4Rec':
+            with torch.backends.cudnn.flags(enabled=False):
+                metaloader_iter = iter(self.current_epoch_metaloaders(nepoch))
+                batch = next(metaloader_iter)
+                batch = {k: v.to(self.device) for k, v in batch.items()}
+                batch['neg_item'] = self._neg_sampling(batch)
+                training_step_args = {'batch': batch, 'align': False}
+                meta_loss = self.sub_model.training_step(**training_step_args)
 
-        trainloader = self.current_epoch_trainloaders(nepoch)
-        batch = next(iter(trainloader))
-        batch = {k: v.to(self.device) for k, v in batch.items()}
-        batch['neg_item'] = self._neg_sampling(batch)
-        training_step_args = {'batch': batch, 'align': False}
-        meta_train_loss = self.training_step(**training_step_args)
+                trainloader = self.current_epoch_trainloaders(nepoch)
+                batch = next(iter(trainloader))
+                batch = {k: v.to(self.device) for k, v in batch.items()}
+                batch['neg_item'] = self._neg_sampling(batch)
+                training_step_args = {'batch': batch, 'align': False}
+                meta_train_loss = self.training_step(**training_step_args)
+                self.meta_optimizer.step(
+                    val_loss=meta_loss,
+                    train_loss=meta_train_loss,
+                    aux_params = list(self.meta_module.parameters()),
+                    parameters = list(self.sub_model.parameters()),
+                    return_grads = False,
+                )
+        else:
+            metaloader_iter = iter(self.current_epoch_metaloaders(nepoch))
+            batch = next(metaloader_iter)
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            batch['neg_item'] = self._neg_sampling(batch)
+            training_step_args = {'batch': batch, 'align': False}
+            meta_loss = self.sub_model.training_step(**training_step_args)
 
-        self.meta_optimizer.step(
-            val_loss=meta_loss,
-            train_loss=meta_train_loss,
-            aux_params = list(self.meta_module.parameters()),
-            parameters = list(self.sub_model.parameters()),
-            return_grads = False,
-        )
+            trainloader = self.current_epoch_trainloaders(nepoch)
+            batch = next(iter(trainloader))
+            batch = {k: v.to(self.device) for k, v in batch.items()}
+            batch['neg_item'] = self._neg_sampling(batch)
+            training_step_args = {'batch': batch, 'align': False}
+            meta_train_loss = self.training_step(**training_step_args)
+            self.meta_optimizer.step(
+                val_loss=meta_loss,
+                train_loss=meta_train_loss,
+                aux_params = list(self.meta_module.parameters()),
+                parameters = list(self.sub_model.parameters()),
+                return_grads = False,
+            )
+
 
     def selection(self, query):
         logits = self.meta_module(query)
@@ -148,6 +171,8 @@ class MetaModel7(BaseModel):
         return logits.squeeze()
 
     def training_step(self, batch, reduce=True, return_query=True, align=False):
+        if self.config['model']['sub_model'] == 'GRU4Rec':
+            torch.backends.cudnn.flags(enabled=False)
         loss_value, query = self.sub_model.training_step(batch, reduce=False, return_query=True, align=False)
         weight = self.selection(query)
         # weight = self.selection(query) * query.shape[0]

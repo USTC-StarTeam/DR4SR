@@ -1,4 +1,8 @@
 model:
   hidden_size: 256
-  dropout_rate: 0.4
+  dropout_rate: 0.5
   layer_num: 2
+
+train:
+  learning_rate: 0.001
+  weight_decay: 0.00001

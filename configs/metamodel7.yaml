@@ -1,5 +1,5 @@
 model:
-  sub_model: 'SASRec'
+  sub_model: 'GRU4Rec'
   hidden_size: 128
   layer_num: 2
   head_num: 2
