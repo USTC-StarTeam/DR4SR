@@ -9,14 +9,17 @@ model:
   temperature: 1.0
   cl_weight: 0.1
 
-  tau: 0.2
-  gamma: 0.7
-  beta: 0.2
-
-  # tau: 0.4
-  # gamma: 0.4
+  # toy & beauty
+  # tau: 0.2
+  # gamma: 0.7
   # beta: 0.2
+
+  # sport
+  tau: 0.4
+  gamma: 0.4
+  beta: 0.2
   
+  # yelp
   # tau: 0.4
   # gamma: 0.7
   # beta: 0.2

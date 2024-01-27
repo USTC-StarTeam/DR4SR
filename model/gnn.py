@@ -12,7 +12,7 @@ from copy import deepcopy
 class GNNQueryEncoder(torch.nn.Module):
     def __init__(
             self, fiid, embed_dim, max_seq_len, n_head, hidden_size, dropout, activation, layer_norm_eps, n_layer, item_encoder, graph,
-            bidirectional=False, training_pooling_type='last', eval_pooling_type='last') -> None:
+            bidirectional=False, training_pooling_type='origin', eval_pooling_type='last') -> None:
         super().__init__()
         self.fiid = fiid
         self.item_encoder = item_encoder
@@ -129,3 +129,6 @@ class GNN(BaseModel):
 
     def forward(self, batch):
         return self.query_encoder(batch)
+
+    def training_step(self, batch, reduce=True, return_query=False, align=False):
+        return super().training_step(batch, reduce, return_query)
