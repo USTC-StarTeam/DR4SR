@@ -1,9 +1,6 @@
 data.train_file:
   values: ['_ori', '_gene']
 
-model.graph:
-  values: ['old', 'new']
-
 model.gnn_layer:
   values: [1, 2, 3]
 
