@@ -95,6 +95,9 @@ class GNN(BaseModel):
             graph,
             config['model']['gnn_layer']
         )
+        # if self.config['data']['train_file'] == '_ori' and \
+        #     self.config['model']['graph'] == 'new':
+        #         self.config['train']['epochs'] = 1
 
     def _build_graph_old(self):
         # get user seq from validation dataset
@@ -113,7 +116,7 @@ class GNN(BaseModel):
             item_list = history_matrix[idx][:item_list_len]
             # build graph with sliding window of size 2
             for item_idx in range(item_list_len - 1):
-                target_num = min(2, item_list_len - item_idx - 1)
+                target_num = min(self.config['model']['window'], item_list_len - item_idx - 1)
                 row += [item_list[item_idx]] * target_num
                 col += item_list[item_idx + 1: item_idx + 1 + target_num]
                 data.append(1 / np.arange(1, 1 + target_num))
@@ -142,13 +145,12 @@ class GNN(BaseModel):
         # build graph
         row, col, data = [], [], []
         for idx, item_list_len in enumerate(history_len):
-            # -1 as the validation dataset includes the target item in training dataset
-            item_list_len -= 1
+            # item_list_len = item_list_len - 1
             # get item_list
             item_list = history_matrix[idx][:item_list_len]
             # build graph with sliding window of size 2
             for item_idx in range(item_list_len - 1):
-                target_num = min(2, item_list_len - item_idx - 1)
+                target_num = min(self.config['model']['window'], item_list_len - item_idx - 1)
                 row += [item_list[item_idx]] * target_num
                 col += item_list[item_idx + 1: item_idx + 1 + target_num]
                 data.append(1 / np.arange(1, 1 + target_num))

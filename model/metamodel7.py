@@ -45,6 +45,7 @@ class MetaModel7(BaseModel):
         }
         sub_model_config = load_config(sub_model_config)
         sub_model_config['train']['device'] = 0
+        self.logger.info(sub_model_config)
         model_class = get_model_class(sub_model_config['model'])
         return model_class(sub_model_config, self.dataset_list)
 

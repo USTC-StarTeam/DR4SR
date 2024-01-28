@@ -6,4 +6,5 @@ model:
   activation: 'gelu'
   layer_norm_eps: 1.0e-12
   graph: 'new'
-  gnn_layer: 2
+  gnn_layer: 1
+  window: 2
