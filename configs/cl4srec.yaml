@@ -1,5 +1,5 @@
 model:
-  hidden_size: 128
+  hidden_size: 64
   layer_num: 2
   head_num: 2
   dropout_rate: 0.5
@@ -10,14 +10,14 @@ model:
   cl_weight: 0.1
 
   # toy & beauty
-  # tau: 0.2
-  # gamma: 0.7
-  # beta: 0.2
+  tau: 0.2
+  gamma: 0.7
+  beta: 0.2
 
   # sport
-  tau: 0.4
-  gamma: 0.4
-  beta: 0.2
+  # tau: 0.4
+  # gamma: 0.4
+  # beta: 0.2
   
   # yelp
   # tau: 0.4

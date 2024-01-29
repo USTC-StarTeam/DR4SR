@@ -51,7 +51,7 @@ class BaseModel(nn.Module):
         user_seq = batch['in_' + self.fiid]
         weight = torch.ones(user_seq.shape[0], self.num_items, device=self.device)
         _idx = torch.arange(user_seq.size(0), device=self.device).view(-1, 1).expand_as(user_seq)
-        weight[_idx, user_seq] = 0.0
+        # weight[_idx, user_seq] = 0.0
         weight[:, 0] = 0 # padding
         if len(batch[self.fiid].shape) == 2:
             neg_idx = torch.multinomial(weight, self.max_seq_len, replacement=True)
