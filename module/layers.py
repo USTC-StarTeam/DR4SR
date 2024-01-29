@@ -737,3 +737,72 @@ class TransformerEncoder(nn.Module):
             all_encoder_layers.append(hidden_states)
         return all_encoder_layers
 
+class FilterLayer(nn.Module):
+    def __init__(self):
+        super(FilterLayer, self).__init__()
+        self.complex_weight = nn.Parameter(torch.randn(1, 50//2 + 1, 64, 2, dtype=torch.float32) * 0.02)
+        self.out_dropout = nn.Dropout(0.5)
+        self.LayerNorm = nn.LayerNorm(64, eps=1e-12)
+
+    def forward(self, input_tensor):
+        # [batch, seq_len, hidden]
+        #sequence_emb_fft = torch.rfft(input_tensor, 2, onesided=False)  # [:, :, :, 0]
+        #sequence_emb_fft = torch.fft(sequence_emb_fft.transpose(1, 2), 2)[:, :, :, 0].transpose(1, 2)
+        batch, seq_len, hidden = input_tensor.shape
+        x = torch.fft.rfft(input_tensor, dim=1, norm='ortho')
+        weight = torch.view_as_complex(self.complex_weight)
+        x = x * weight
+        sequence_emb_fft = torch.fft.irfft(x, n=seq_len, dim=1, norm='ortho')
+        hidden_states = self.out_dropout(sequence_emb_fft)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+
+        return hidden_states
+
+class Intermediate(nn.Module):
+    def __init__(self, hidden_size=64, hidden_dropout_prob=0.5):
+        super(Intermediate, self).__init__()
+        self.dense_1 = nn.Linear(hidden_size, hidden_size * 4)
+        self.intermediate_act_fn = fn.gelu
+
+        self.dense_2 = nn.Linear(4 * hidden_size, hidden_size)
+        self.LayerNorm = nn.LayerNorm(hidden_size, eps=1e-12)
+        self.dropout = nn.Dropout(hidden_dropout_prob)
+
+    def forward(self, input_tensor):
+        hidden_states = self.dense_1(input_tensor)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+
+        hidden_states = self.dense_2(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+
+        return hidden_states
+
+class Layer(nn.Module):
+    def __init__(self):
+        super(Layer, self).__init__()
+        self.filterlayer = FilterLayer()
+        self.intermediate = Intermediate()
+
+    def forward(self, hidden_states):
+        hidden_states = self.filterlayer(hidden_states)
+
+        intermediate_output = self.intermediate(hidden_states)
+        return intermediate_output
+
+class FMLPEncoder(nn.Module):
+    def __init__(self, num_hidden_layers=2):
+        super(FMLPEncoder, self).__init__()
+        layer = Layer()
+        self.layer = nn.ModuleList([copy.deepcopy(layer)
+                                    for _ in range(num_hidden_layers)])
+
+    def forward(self, hidden_states, output_all_encoded_layers=True):
+        all_encoder_layers = []
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+            if output_all_encoded_layers:
+                all_encoder_layers.append(hidden_states)
+        if not output_all_encoded_layers:
+            all_encoder_layers.append(hidden_states)
+        return all_encoder_layers
