@@ -17,6 +17,10 @@ from module.layers import SeqPoolingLayer
 from utils import normal_initialization
 from module.layers import SeqPoolingLayer
 
+from utils import normal_initialization
+from module.layers import SeqPoolingLayer
+K = 1
+
 class ConditionEncoder(nn.Module):
     def __init__(self, K) -> None:
         super().__init__()
@@ -71,13 +75,13 @@ class Generator(nn.Module):
             batch_first=True,
         )
         self.condition_linear = nn.Sequential(
-            nn.Linear(64, 64 * 5),
+            nn.Linear(64, 64 * K),
             nn.ReLU(),
-            nn.Linear(64 * 5, 64 * 5)
+            nn.Linear(64 * K, 64 * K)
         )
         self.dropout = nn.Dropout(0.5)
         self.position_embedding = torch.nn.Embedding(50, 64)
-        self.condition_encoder = ConditionEncoder(5)
+        self.condition_encoder = ConditionEncoder(K)
         self.device = 'cuda'
         self.apply(normal_initialization)
         self.load_pretrained()
@@ -119,7 +123,7 @@ class Generator(nn.Module):
 
         memory = self.transformer.encoder(src_emb, src_mask, src_padding_mask)
         B, L, D = memory.shape
-        memory = self.condition_linear(memory).reshape(B, L, 5, D)
+        memory = self.condition_linear(memory).reshape(B, L, K, D)
 
         position_ids = torch.arange(tgt.size(1), dtype=torch.long, device=self.device)
         position_ids = position_ids.reshape(1, -1)
@@ -127,7 +131,7 @@ class Generator(nn.Module):
         tgt_emb = self.dropout(self.item_embedding(tgt) + tgt_position_embedding)
 
         condition = self.condition_encoder(tgt_emb, tgt_mask, tgt_padding_mask, tgt_seqlen) # BK
-        condition = condition.reshape(B, 1, 5, 1)
+        condition = condition.reshape(B, 1, K, 1)
         memory_cond = (memory * condition).sum(-2)
 
         outs = self.transformer.decoder(tgt_emb, memory_cond, tgt_mask, None, tgt_padding_mask, memory_key_padding_mask)
@@ -150,7 +154,7 @@ class Generator(nn.Module):
 
     def decode(self, tgt, memory, tgt_mask):
         B, L, D = memory.shape
-        memory = self.condition_linear(memory).reshape(B, L, 5, D)[:, :, self.condition]
+        memory = self.condition_linear(memory).reshape(B, L, K, D)[:, :, self.condition]
         position_ids = torch.arange(tgt.size(1), dtype=torch.long, device=self.device)
         position_ids = position_ids.reshape(1, -1)
         tgt_position_embedding = self.position_embedding(position_ids)
@@ -238,7 +242,7 @@ SOS = num_item
 EOS = num_item + 1
 
 model = Generator().to('cuda')
-model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2.pth'))
+model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2-K1.pth'))
 
 def preprocess(seq):
     return torch.tensor([SOS] + seq + [EOS], device='cuda')
@@ -247,10 +251,10 @@ seqlist = [_[1][:_[3]] + [_[2][_[3] - 1]] for _ in original_data]
 seqlist = [preprocess(_) for _ in seqlist]
 
 filtered_sequences = []
-for i in range(5):
+for i in range(K):
     model.set_condition(condition)
     for seq in tqdm(seqlist[begin:end]):
         rst = translate(model, seq)
-        filtered_sequences.append(seq)
+        filtered_sequences.append(rst)
 
-torch.save(filtered_sequences, f'./f-seq-con2-gene-{dataset_name}-{begin}-{end}.pth')
+torch.save(filtered_sequences, f'./f-seq-con2-K1-{dataset_name}-{begin}-{end}.pth')
