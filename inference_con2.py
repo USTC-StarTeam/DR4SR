@@ -14,6 +14,9 @@ from module.layers import SeqPoolingLayer
 from utils import normal_initialization
 from module.layers import SeqPoolingLayer
 
+from utils import normal_initialization
+from module.layers import SeqPoolingLayer
+
 class ConditionEncoder(nn.Module):
     def __init__(self, K) -> None:
         super().__init__()
@@ -118,14 +121,14 @@ class Generator(nn.Module):
         B, L, D = memory.shape
         memory = self.condition_linear(memory).reshape(B, L, 5, D)
 
-        condition = self.condition_encoder(src_emb, src_mask, src_padding_mask, src_seqlen) # BK
-        condition = condition.reshape(B, 1, 5, 1)
-        memory_cond = (memory * condition).sum(-2)
-
         position_ids = torch.arange(tgt.size(1), dtype=torch.long, device=self.device)
         position_ids = position_ids.reshape(1, -1)
         tgt_position_embedding = self.position_embedding(position_ids)
         tgt_emb = self.dropout(self.item_embedding(tgt) + tgt_position_embedding)
+
+        condition = self.condition_encoder(tgt_emb, tgt_mask, tgt_padding_mask, tgt_seqlen) # BK
+        condition = condition.reshape(B, 1, 5, 1)
+        memory_cond = (memory * condition).sum(-2)
 
         outs = self.transformer.decoder(tgt_emb, memory_cond, tgt_mask, None, tgt_padding_mask, memory_key_padding_mask)
 
