@@ -1,5 +1,5 @@
 train.meta_weight_decay:
-  values: [1.0e-3, 1.0e-2, 1.0e-1, 1]
+  values: [1.0e-3, 1.0e-2, 1.0e-1]
 
 train.hpo_learning_rate:
   values: [1.0e-3, 1.0e-2, 1.0e-1]

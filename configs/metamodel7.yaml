@@ -1,5 +1,5 @@
 model:
-  sub_model: 'CL4SRec'
+  sub_model: 'SASRec'
   hidden_size: 128
   layer_num: 2
   head_num: 2

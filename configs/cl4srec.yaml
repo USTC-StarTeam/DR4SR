@@ -1,5 +1,5 @@
 model:
-  hidden_size: 64
+  hidden_size: 128
   layer_num: 2
   head_num: 2
   dropout_rate: 0.5
@@ -7,11 +7,16 @@ model:
   layer_norm_eps: 1.0e-12
   augment_type: 'item_random'
   temperature: 1.0
-  cl_weight: 0.1
+  cl_weight: 0.2
 
-  # toy & beauty
+  # toy
+  # tau: 0.2
+  # gamma: 0.7
+  # beta: 0.2
+
+  # beauty
   tau: 0.2
-  gamma: 0.7
+  gamma: 0.4
   beta: 0.2
 
   # sport
@@ -24,3 +29,5 @@ model:
   # gamma: 0.7
   # beta: 0.2
 
+train:
+  early_stop_patience: 20

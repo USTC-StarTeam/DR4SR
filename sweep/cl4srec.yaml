@@ -1,8 +1,8 @@
 data.train_file:
-  values: ['_ori', '_gene']
+  values: ['_ori', '_gene5']
 
-model.layer_num:
-  values: [2, 3]
+# model.layer_num:
+#   values: [2, 3]
 
-model.cl_weight:
-  values: [0.05, 0.1, 0.2, 0.5]
+model.gamma:
+  values: [0.2, 0.4, 0.7]

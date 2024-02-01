@@ -220,15 +220,15 @@ begin = args.begin * 5000
 end = args.end * 5000
 condition = args.condition
 
-dataset_name = 'yelp-small'
-full_dataset_name = 'yelp-small'
+dataset_name = 'beauty'
+full_dataset_name = 'amazon-beauty'
 num_item_dict = {
     'toy': 11925,
     'sport': 18358,
     'beauty': 12102,
     'yelp-small': 20034,
 }
-path = f'./{dataset_name}-pair.pth'
+path = f'./{dataset_name}-pair5.pth'
 data = torch.load(path)
 num_item = num_item_dict[dataset_name]
 SOS = num_item

@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[24]:
+
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,15 +13,99 @@ from utils.reparam_module import ReparamModule
 import numpy as np
 import random
 from tqdm import tqdm
-from argparse import ArgumentParser
-from utils import normal_initialization
-from module.layers import SeqPoolingLayer
 
-from utils import normal_initialization
-from module.layers import SeqPoolingLayer
 
-from utils import normal_initialization
-from module.layers import SeqPoolingLayer
+# # Enviroment
+
+# In[25]:
+
+
+seed = 2024
+
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.backends.cudnn.deterministic = True
+import os
+
+
+# # Dataset
+
+# In[26]:
+
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
+dataset_name = 'yelp-small'
+full_dataset_name = 'yelp-small'
+num_item_dict = {
+    'toy': 11925,
+    'sport': 18358,
+    'beauty':12102,
+    'yelp-small': 20034,
+}
+path = f'./{dataset_name}-pair2.pth'
+data = torch.load(path)
+num_item = num_item_dict[dataset_name]
+SOS = num_item
+EOS = num_item + 1
+
+
+# In[27]:
+
+
+source, target = [], []
+source_seqlen, target_seqlen = [], []
+for _ in data:
+    s, t = _
+    source_seqlen.append(len(s) + 2)
+    target_seqlen.append(len(t) + 2)
+    s = torch.tensor([SOS] + s + [EOS])
+    t = torch.tensor([SOS] + t + [EOS])
+    source.append(s)
+    target.append(t)
+source = pad_sequence(source, batch_first=True, padding_value=0)
+target = pad_sequence(target, batch_first=True, padding_value=0)
+if target.shape[1] < 20:
+    target = torch.cat([target, torch.zeros(target.shape[0], 20 - target.shape[1], dtype=torch.int)], dim=-1)
+source_seqlen = torch.tensor(source_seqlen)
+target_seqlen = torch.tensor(target_seqlen)
+
+
+# In[28]:
+
+
+from torch.utils.data import Dataset, DataLoader
+class MyDataset(Dataset):
+    def __init__(
+            self,
+            source,
+            target,
+            source_seqlen,
+            target_seqlen,
+        ) -> None:
+        super().__init__()
+        self.source = source.to('cuda')
+        self.target = target.to('cuda')
+        self.source_seq_len = source_seqlen.to('cuda')
+        self.target_seq_len = target_seqlen.to('cuda')
+
+    def __len__(self):
+        return len(self.source)
+
+    def __getitem__(self, index):
+        src = self.source[index]
+        tgt = self.target[index]
+        src_len = self.source_seq_len[index]
+        tgt_len = self.target_seq_len[index]
+        return src, tgt, src_len, tgt_len
+
+
+# # Model
+
+# In[29]:
+
 
 from utils import normal_initialization
 from module.layers import SeqPoolingLayer
@@ -180,82 +270,65 @@ def create_mask(src, tgt):
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
 
 
-def inference_mask(logits, src, ys):
-    mask = torch.zeros_like(logits, device=logits.device, dtype=torch.bool)
-    mask = mask.scatter(-1, src, 1)
-    mask = mask.scatter(-1, ys, 0)
-    logits = torch.masked_fill(logits, ~mask, -torch.inf)
-    return logits
+# # Train
 
-def greedy_decode(model, src, src_mask, max_len, start_symbol):
-    src = src.to('cuda')
-    src_mask = src_mask.to('cuda')
+# In[30]:
 
-    memory = model.encode(src, src_mask)
-    ys = torch.ones(1, 1).fill_(start_symbol).type(torch.long).to('cuda')
-    for i in range(max_len-1):
-        memory = memory.to('cuda')
-        tgt_mask = (generate_square_subsequent_mask(ys.size(1))
-                    .type(torch.bool)).to('cuda')
-        out = model.decode(ys, memory, tgt_mask)
-        prob = out[:, -1] @ model.item_embedding_decoder.weight.T
-        prob = inference_mask(prob, src, ys)
-        _, next_word = torch.max(prob, dim=-1)
-        next_word = next_word.item()
 
-        ys = torch.cat([ys,
-                        torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
-        if next_word == EOS:
-            break
-    return ys
-
-def translate(model: torch.nn.Module, src):
-    model.eval()
-    src = src.reshape(1, -1)
-    num_tokens = src.shape[1]
-    src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
-    tgt_tokens = greedy_decode(
-        model, src, src_mask, max_len=25, start_symbol=SOS).flatten()
-    return tgt_tokens
-
-parser = ArgumentParser()
-parser.add_argument('--begin', '-b', type=int, default=0, help='model name')
-parser.add_argument('--end', '-e', type=int, default=1, help='dataset name')
-parser.add_argument('--condition', '-c', type=int, default=0, help='dataset name')
-args = parser.parse_args()
-begin = args.begin * 5000
-end = args.end * 5000
-condition = args.condition
-
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-
-dataset_name = 'yelp-small'
-full_dataset_name = 'yelp-small'
-num_item_dict = {
-    'toy': 11925,
-    'sport': 18358,
-    'beauty': 12102,
-    'yelp-small': 20034,
-}
-num_item = num_item_dict[dataset_name]
-SOS = num_item
-EOS = num_item + 1
-
+from torch.optim.lr_scheduler import CosineAnnealingLR
+NUM_EPOCHS = 40
 model = Generator().to('cuda')
-model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2-real.pth'))
+loss_fn = nn.CrossEntropyLoss(ignore_index=0)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.98), eps=1e-9)
+dataset = MyDataset(source, target, source_seqlen, target_seqlen)
+lr_scheduler = CosineAnnealingLR(
+    optimizer,
+    T_max=NUM_EPOCHS,
+)
 
-def preprocess(seq):
-    return torch.tensor([SOS] + seq + [EOS], device='cuda')
-original_data = torch.load(f'./dataset/{full_dataset_name}-noise-50/{dataset_name}/train_ori.pth')
-seqlist = [_[1][:_[3]] + [_[2][_[3] - 1]] for _ in original_data]
-seqlist = [preprocess(_) for _ in seqlist]
 
-filtered_sequences = []
-for i in range(K):
-    model.set_condition(condition)
-    for seq in tqdm(seqlist[begin:end]):
-        rst = translate(model, seq)
-        filtered_sequences.append(rst)
+# In[31]:
 
-torch.save(filtered_sequences, f'./f-seq-con2-{dataset_name}-{begin}-{end}.pth')
+
+def train_epoch(model, optimizer):
+    model.train()
+    losses = 0
+    train_dataloader = DataLoader(dataset, batch_size=256, shuffle=True)
+    for src, tgt, src_seqlen, tgt_seqlen in tqdm(train_dataloader):
+        tgt_input = tgt[:, :-1]
+        src_mask, tgt_mask, src_padding_mask, tgt_padding_mask = create_mask(src, tgt_input)
+        logits = model(
+            src, tgt_input, src_mask, tgt_mask,
+            src_padding_mask, tgt_padding_mask, src_padding_mask,
+            src_seqlen, tgt_seqlen)
+        optimizer.zero_grad()
+        tgt_out = tgt[:, 1:]
+        loss = loss_fn(logits.reshape(-1, logits.shape[-1]), tgt_out.reshape(-1))
+        condition_prob = model.condition_encoder.condition4loss
+        reg_loss = - (condition_prob * torch.log(condition_prob + 1e-12)).sum(-1).mean()
+        losses += loss.item()
+        loss = loss + 1 * reg_loss
+        loss.backward()
+
+        optimizer.step()
+        lr_scheduler.step()
+    return losses / len(list(train_dataloader))
+
+
+# In[32]:
+
+
+from timeit import default_timer as timer
+
+
+for epoch in range(1, NUM_EPOCHS+1):
+    start_time = timer()
+    train_loss = train_epoch(model, optimizer)
+    end_time = timer()
+    print((f"Epoch: {epoch}, Train loss: {train_loss:.3f}, "f"Epoch time = {(end_time - start_time):.3f}s"))
+
+
+# In[33]:
+
+
+torch.save(model.state_dict(), f'translator-{dataset_name}-con2-real.pth')
