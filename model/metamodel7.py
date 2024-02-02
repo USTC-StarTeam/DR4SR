@@ -181,10 +181,6 @@ class MetaModel7(BaseModel):
         weight = weight.masked_fill(mask.unsqueeze(-1), 1)
         pad_mask = batch[self.fiid] == 0
         weight = weight.masked_fill(pad_mask, 0)
-        if self.counter % 500 == 0:
-            torch.set_printoptions(precision=3, sci_mode=False)
-            self.logger.info(weight)
-            torch.set_printoptions(precision=4, sci_mode=False)
         self.counter += 1
         if not isinstance(loss_value, tuple):
             loss_value = (loss_value * weight).sum()

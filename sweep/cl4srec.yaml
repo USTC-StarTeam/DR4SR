@@ -1,5 +1,5 @@
 data.train_file:
-  values: ['_ori', '_gene5']
+  values: ['_ori', '_gene-real2']
 
 # model.layer_num:
 #   values: [2, 3]

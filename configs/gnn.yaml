@@ -5,6 +5,6 @@ model:
   dropout_rate: 0.5
   activation: 'gelu'
   layer_norm_eps: 1.0e-12
-  graph: 'new'
-  gnn_layer: 1
+  graph: 'old'
+  gnn_layer: 2
   window: 2

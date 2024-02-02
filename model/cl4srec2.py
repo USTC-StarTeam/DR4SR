@@ -47,7 +47,7 @@ class CL4SRec2(SASRec):
         aug_config = deepcopy(config)
         aug_config['data']['train_file'] = '_ori'
         self.aug_dataset_list = prepare_datasets(aug_config)
-        self.aug_loader = iter(self.aug_dataset_list[0])
+        self.aug_loader = iter(self.aug_dataset_list[0].get_loader())
 
     def _init_model(self, train_data):
         super()._init_model(train_data)
@@ -58,7 +58,7 @@ class CL4SRec2(SASRec):
         try:
             aug_batch = next(self.aug_loader)
         except StopIteration:
-            self.aug_loader = iter(self.aug_dataset_list[0])
+            self.aug_loader = iter(self.aug_dataset_list[0].get_loader())
             aug_batch = next(self.aug_loader)
         cl_output = self.augmentation_model(aug_batch, self.query_encoder, reduce=reduce)
         cl_loss = self.config['model']['cl_weight'] * cl_output['cl_loss']

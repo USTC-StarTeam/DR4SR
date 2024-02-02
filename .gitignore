@@ -144,3 +144,4 @@ cython_debug/
 wandb
 test.ipynb
 seq_len/
+figure/

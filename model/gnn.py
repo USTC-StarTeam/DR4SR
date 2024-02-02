@@ -170,8 +170,8 @@ class GNN(BaseModel):
         )
         return norm_adj
 
-    def forward(self, batch):
-        return self.query_encoder(batch)
+    def forward(self, batch, need_pooling=True):
+        return self.query_encoder(batch, need_pooling)
 
     def training_step(self, batch, reduce=True, return_query=False, align=False):
         return super().training_step(batch, reduce, return_query)

@@ -8,14 +8,6 @@ import numpy as np
 import random
 from tqdm import tqdm
 from argparse import ArgumentParser
-from utils import normal_initialization
-from module.layers import SeqPoolingLayer
-
-from utils import normal_initialization
-from module.layers import SeqPoolingLayer
-
-from utils import normal_initialization
-from module.layers import SeqPoolingLayer
 
 from utils import normal_initialization
 from module.layers import SeqPoolingLayer
@@ -230,8 +222,8 @@ condition = args.condition
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
-dataset_name = 'yelp-small'
-full_dataset_name = 'yelp-small'
+dataset_name = 'toy'
+full_dataset_name = 'amazon-toys'
 num_item_dict = {
     'toy': 11925,
     'sport': 18358,
@@ -243,7 +235,7 @@ SOS = num_item
 EOS = num_item + 1
 
 model = Generator().to('cuda')
-model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2-real.pth'))
+model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2.pth'))
 
 def preprocess(seq):
     return torch.tensor([SOS] + seq + [EOS], device='cuda')
@@ -252,10 +244,10 @@ seqlist = [_[1][:_[3]] + [_[2][_[3] - 1]] for _ in original_data]
 seqlist = [preprocess(_) for _ in seqlist]
 
 filtered_sequences = []
-for i in range(K):
+for i in range(1):
     model.set_condition(condition)
     for seq in tqdm(seqlist[begin:end]):
         rst = translate(model, seq)
         filtered_sequences.append(rst)
 
-torch.save(filtered_sequences, f'./f-seq-con2-{dataset_name}-{begin}-{end}.pth')
+torch.save(filtered_sequences, f'./f-seq-con2-K1-{dataset_name}-{begin}-{end}.pth')

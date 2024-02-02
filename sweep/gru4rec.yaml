@@ -1,8 +1,5 @@
 data.train_file:
-  values: ['_ori', '_gene']
-
-model.layer_num:
-  values: [2, 3]
+  values: ['_ori', '_gene-real2']
 
 model.dropout_rate:
   values: [0.2, 0.5]

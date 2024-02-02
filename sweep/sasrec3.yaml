@@ -1,5 +1,0 @@
-model.uniformity:
-  values: [0.2, 0.5, 0.7, 1, 2]
-
-model.K:
-  values: [128, 256, 512]

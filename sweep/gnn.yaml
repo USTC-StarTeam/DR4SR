@@ -1,8 +1,8 @@
 data.train_file:
-  values: ['_ori', '_gene']
+  values: ['_ori', '_gene-real2']
 
-model.gnn_layer:
-  values: [1, 2, 3]
+# model.gnn_layer:
+#   values: [2, 3]
 
 model.window:
   values: [1, 2]
