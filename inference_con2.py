@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 
 from utils import normal_initialization
 from module.layers import SeqPoolingLayer
-K = 7
+K = 5
 
 class ConditionEncoder(nn.Module):
     def __init__(self, K) -> None:
@@ -197,11 +197,15 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
                     .type(torch.bool)).to('cuda')
         out = model.decode(ys, memory, tgt_mask)
         prob = out[:, -1] @ model.item_embedding_decoder.weight.T
-        prob = inference_mask_generative(prob, src, ys)
+        if random.random() > 0.1 or i <= 0:
+            prob = inference_mask(prob, src, ys)
+        else:
+            prob = inference_mask_generative(prob, src, ys)
         _, next_word = torch.max(prob, dim=-1)
         next_word = next_word.item()
 
-        ys = torch.cat([ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
+        ys = torch.cat([ys,
+                        torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
         if next_word == EOS:
             break
     return ys
@@ -225,7 +229,7 @@ end = args.end * 5000
 condition = args.condition
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 dataset_name = 'toy'
 full_dataset_name = 'amazon-toys'
@@ -240,7 +244,7 @@ SOS = num_item
 EOS = num_item + 1
 
 model = Generator().to('cuda')
-model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2-K7.pth'))
+model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2-generative.pth'))
 
 def preprocess(seq):
     return torch.tensor([SOS] + seq + [EOS], device='cuda')
@@ -255,4 +259,4 @@ for i in range(K):
         rst = translate(model, seq)
         filtered_sequences.append(rst)
 
-torch.save(filtered_sequences, f'./f-seq-con2-generative-{dataset_name}-{begin}-{end}.pth')
+torch.save(filtered_sequences, f'./f-seq-con2-generative0.1-0-{dataset_name}-{begin}-{end}.pth')
