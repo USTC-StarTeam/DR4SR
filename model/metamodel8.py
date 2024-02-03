@@ -24,9 +24,10 @@ class MetaModel8(BaseModel):
         self.item_embedding = None # MetaModel is just a trainer without item embedding
         self.counter = 0
         sub_model = 'SASRec'
-        path_loss_weight = f'paper/loss_weight_{sub_model}_toys.pth'
+        dataset_name = config['data']['domain_name_list'][0]
+        path_loss_weight = f'paper/loss_weight_{sub_model}_{dataset_name}.pth'
         self.loss_weight = torch.load(path_loss_weight, map_location=self.device)
-        path_logits = f'paper/logits_{sub_model}_toys.pth'
+        path_logits = f'paper/logits_{sub_model}_{dataset_name}.pth'
         self.logits, self.tau = torch.load(path_logits, map_location=self.device)
 
     def _init_model(self, train_data):
@@ -77,8 +78,6 @@ class MetaModel8(BaseModel):
 
     def training_step(self, batch, reduce=True, return_query=True, align=False):
         loss_value = self.sub_model.training_step(batch, reduce=False, return_query=False, align=False)
-
-        # weight = self.loss_weight[batch['index']]
 
         weight = F.gumbel_softmax(self.logits[batch['index']], tau=self.tau, dim=-1)[..., 0]
         mask = batch['user_id'] == 0

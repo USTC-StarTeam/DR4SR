@@ -26,9 +26,10 @@ class MetaModel9(BaseModel):
         self.tau = nn.Parameter(torch.ones(1, device=self.device) * 10)
         self.counter = 0
         sub_model = 'SASRec'
-        path_loss_weight = f'paper/loss_weight_{sub_model}_toys.pth'
+        dataset_name = config['data']['domain_name_list'][0]
+        path_loss_weight = f'paper/loss_weight_{sub_model}_{dataset_name}.pth'
         self.loss_weight = torch.load(path_loss_weight, map_location=self.device)
-        path_logits = f'paper/logits_{sub_model}_toys.pth'
+        path_logits = f'paper/logits_{sub_model}_{dataset_name}.pth'
         self.logits, self.tau_residual = torch.load(path_logits, map_location=self.device)
 
     def _init_model(self, train_data):
@@ -188,10 +189,6 @@ class MetaModel9(BaseModel):
         weight = weight.masked_fill(mask.unsqueeze(-1), 1)
         pad_mask = batch[self.fiid] == 0
         weight = weight.masked_fill(pad_mask, 0)
-        if self.counter % 500 == 0:
-            torch.set_printoptions(precision=3, sci_mode=False)
-            self.logger.info(weight)
-            torch.set_printoptions(precision=4, sci_mode=False)
         self.counter += 1
         if not isinstance(loss_value, tuple):
             loss_value = (loss_value * weight).sum()

@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 
 from utils import normal_initialization
 from module.layers import SeqPoolingLayer
-K = 5
+K = 7
 
 class ConditionEncoder(nn.Module):
     def __init__(self, K) -> None:
@@ -179,6 +179,12 @@ def inference_mask(logits, src, ys):
     logits = torch.masked_fill(logits, ~mask, -torch.inf)
     return logits
 
+def inference_mask_generative(logits, src, ys):
+    mask = torch.ones_like(logits, device=logits.device, dtype=torch.bool)
+    mask = mask.scatter(-1, ys, 0)
+    logits = torch.masked_fill(logits, ~mask, -torch.inf)
+    return logits
+
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     src = src.to('cuda')
     src_mask = src_mask.to('cuda')
@@ -191,12 +197,11 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
                     .type(torch.bool)).to('cuda')
         out = model.decode(ys, memory, tgt_mask)
         prob = out[:, -1] @ model.item_embedding_decoder.weight.T
-        prob = inference_mask(prob, src, ys)
+        prob = inference_mask_generative(prob, src, ys)
         _, next_word = torch.max(prob, dim=-1)
         next_word = next_word.item()
 
-        ys = torch.cat([ys,
-                        torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
+        ys = torch.cat([ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
         if next_word == EOS:
             break
     return ys
@@ -235,7 +240,7 @@ SOS = num_item
 EOS = num_item + 1
 
 model = Generator().to('cuda')
-model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2.pth'))
+model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2-K7.pth'))
 
 def preprocess(seq):
     return torch.tensor([SOS] + seq + [EOS], device='cuda')
@@ -244,10 +249,10 @@ seqlist = [_[1][:_[3]] + [_[2][_[3] - 1]] for _ in original_data]
 seqlist = [preprocess(_) for _ in seqlist]
 
 filtered_sequences = []
-for i in range(1):
+for i in range(K):
     model.set_condition(condition)
     for seq in tqdm(seqlist[begin:end]):
         rst = translate(model, seq)
         filtered_sequences.append(rst)
 
-torch.save(filtered_sequences, f'./f-seq-con2-K1-{dataset_name}-{begin}-{end}.pth')
+torch.save(filtered_sequences, f'./f-seq-con2-generative-{dataset_name}-{begin}-{end}.pth')

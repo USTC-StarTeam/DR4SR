@@ -7,6 +7,3 @@ model:
   activation: 'gelu'
   tau_min: 1
   layer_norm_eps: 1.0e-12
-
-train:
-  early_stop_patience: 40
