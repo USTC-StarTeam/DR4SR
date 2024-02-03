@@ -197,7 +197,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
                     .type(torch.bool)).to('cuda')
         out = model.decode(ys, memory, tgt_mask)
         prob = out[:, -1] @ model.item_embedding_decoder.weight.T
-        if random.random() > 0.1 or i <= 0:
+        if random.random() > 1 or i <= 1:
             prob = inference_mask(prob, src, ys)
         else:
             prob = inference_mask_generative(prob, src, ys)
@@ -229,7 +229,7 @@ end = args.end * 5000
 condition = args.condition
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 dataset_name = 'toy'
 full_dataset_name = 'amazon-toys'
@@ -259,4 +259,4 @@ for i in range(K):
         rst = translate(model, seq)
         filtered_sequences.append(rst)
 
-torch.save(filtered_sequences, f'./f-seq-con2-generative0.1-0-{dataset_name}-{begin}-{end}.pth')
+torch.save(filtered_sequences, f'./f-seq-con2-generative1-1-{dataset_name}-{begin}-{end}.pth')
