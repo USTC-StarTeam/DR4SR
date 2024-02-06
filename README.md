@@ -7,7 +7,7 @@
   - [Yelp](https://github.com/salesforce/ICLRec)
 - Preprocess dataset with scirpts in `dataset/`
   - Amazon: `dataset/preprocess_single.ipynb`
-  - Yelp: `dataset/preprocess_yelp-small.ipynb`
+  - Yelp: `dataset/preprocess_yelp.ipynb`
 - Regenerating dataset with DR4SR
   - Construct the pre-training task
     - Generate rule-based pattern with `pattern_generator_seq2seq.ipynb`
