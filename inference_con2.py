@@ -80,10 +80,10 @@ class Generator(nn.Module):
 
     def load_pretrained(self):
         path_dict = {
-            'toy': 'saved/SASRec/amazon-toys-noise-50/2024-01-22-19-24-37-334415.ckpt',
-            'beauty': 'saved/SASRec/amazon-beauty-noise-50/2024-01-25-10-39-46-322830.ckpt',
-            'sport': 'saved/SASRec/amazon-sport-noise-50/2024-01-25-09-36-23-316839.ckpt',
-            'yelp-small': 'saved/SASRec/yelp-small-noise-50/2024-01-25-20-34-58-431582.ckpt',
+            'toy': 'saved/SASRec/amazon-toys-50/2024-01-22-19-24-37-334415.ckpt',
+            'beauty': 'saved/SASRec/amazon-beauty-50/2024-01-25-10-39-46-322830.ckpt',
+            'sport': 'saved/SASRec/amazon-sport-50/2024-01-25-09-36-23-316839.ckpt',
+            'yelp': 'saved/SASRec/yelp-50/2024-01-25-20-34-58-431582.ckpt',
         }
         path = path_dict[dataset_name]
         saved = torch.load(path, map_location='cpu')
@@ -237,7 +237,7 @@ num_item_dict = {
     'toy': 11925,
     'sport': 18358,
     'beauty': 12102,
-    'yelp-small': 20034,
+    'yelp': 20034,
 }
 num_item = num_item_dict[dataset_name]
 SOS = num_item
@@ -248,7 +248,7 @@ model.load_state_dict(torch.load(f'./translator-{dataset_name}-con2-generative.p
 
 def preprocess(seq):
     return torch.tensor([SOS] + seq + [EOS], device='cuda')
-original_data = torch.load(f'./dataset/{full_dataset_name}-noise-50/{dataset_name}/train_ori.pth')
+original_data = torch.load(f'./dataset/{full_dataset_name}-50/{dataset_name}/train_ori.pth')
 seqlist = [_[1][:_[3]] + [_[2][_[3] - 1]] for _ in original_data]
 seqlist = [preprocess(_) for _ in seqlist]
 
