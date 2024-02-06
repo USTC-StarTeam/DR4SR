@@ -1,4 +1,0 @@
-domain_name_list: ['sport', 'toy']
-user_threshold: 5
-item_threshold: 5
-max_seq_len: 20
