@@ -178,7 +178,9 @@ class MetaModel7(BaseModel):
         weight = self.selection(query)
         # weight = self.selection(query) * query.shape[0]
         mask = batch['user_id'] == 0
-        weight = weight.masked_fill(mask.unsqueeze(-1), 1)
+        if len(weight.shape) == 2:
+            mask = mask.unsqueeze(-1)
+        weight = weight.masked_fill(mask, 1)
         pad_mask = batch[self.fiid] == 0
         weight = weight.masked_fill(pad_mask, 0)
         self.counter += 1

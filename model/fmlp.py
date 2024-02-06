@@ -11,8 +11,8 @@ class FMLP(BaseModel):
         self.position_embeddings = nn.Embedding(50, 64)
         self.LayerNorm = nn.LayerNorm(64, eps=1e-12)
         self.dropout = nn.Dropout(0.5)
-        self.item_encoder = FMLPEncoder()
-        self.training_pooling_layer = SeqPoolingLayer(pooling_type='last')
+        self.item_encoder = FMLPEncoder(num_hidden_layers=config['model']['layer_num'])
+        self.training_pooling_layer = SeqPoolingLayer(pooling_type='origin')
         self.eval_pooling_layer = SeqPoolingLayer(pooling_type='last')
 
     def add_position_embedding(self, sequence):
@@ -35,7 +35,15 @@ class FMLP(BaseModel):
             output_all_encoded_layers=True,
         )
         transformer_out = item_encoded_layers[-1]
-        return transformer_out[:, -1]
+        transformer_out = transformer_out[:, -1]
+        return transformer_out
+        if not need_pooling:
+            return transformer_out
+        else:
+            if self.training:
+                return self.training_pooling_layer(transformer_out, batch['seqlen'])
+            else:
+                return transformer_out[:, -1]
 
     def current_epoch_trainloaders(self, nepoch):
         return super().current_epoch_trainloaders(nepoch)
