@@ -22,3 +22,4 @@
   - Change 'sub_model' option to one of the target models in `configs/metamodel7.yaml`
   - `python run.py -m MetaModel7 -d DATASET`
 
+Note: We use post padding ([1,2,3] -> [1,2,3,0,0]) for all target models except FMLP. And we use pre padding for FMLP ([1,2,3] -> [0,0,1,2,3]), which is consistent with the original implementation of FMLP. This is because we find the previous pre-processing will lead to terrible results of FMLP. This may be related to property of the FFT operation. Therefore, we should run `dataset/dataset_transform.ipynb` to transform all datasets for FMLP.
