@@ -1,5 +1,0 @@
-data.dataset_class:
-  values: ['condense', 'general']
-
-train.batch_size:
-  values: [128, 256, 512]

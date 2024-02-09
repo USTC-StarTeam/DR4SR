@@ -1,8 +1,0 @@
-data.train_file:
-  values: ['_ori', '_gene-real2']
-
-# model.layer_num:
-#   values: [2, 3]
-
-model.gamma:
-  values: [0.2, 0.4, 0.7]

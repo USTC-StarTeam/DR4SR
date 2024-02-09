@@ -1,5 +1,0 @@
-model.layer_num:
-  values: [2, 3, 4]
-
-# train.batch_size:
-#   values: [128, 256, 512]

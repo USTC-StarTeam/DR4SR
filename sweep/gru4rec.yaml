@@ -1,8 +1,0 @@
-data.train_file:
-  values: ['_ori', '_gene-real2']
-
-model.dropout_rate:
-  values: [0.2, 0.5]
-
-train.weight_decay:
-  values: [0.00001, 0.00005, 0.0001]
