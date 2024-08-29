@@ -1,5 +1,7 @@
 # Code of KDD2024 paper: Dataset Regeneration for Sequential Recommendation
 
+This repo will be refactored within few weeks!
+
 ## Procedure to reproduce
 
 - Download datasets
