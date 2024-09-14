@@ -140,7 +140,7 @@ cython_debug/
 **/log
 **/saved
 *.csv
-*.pth
+# *.pth
 wandb
 test.ipynb
 seq_len/
