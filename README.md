@@ -44,7 +44,7 @@ pip install -r requirements.txt
 # 0. Select a target dataset, e.g., Amazon-toys
 DATASET=amazon-toys
 DATA_ALIAS=toy
-ROOT_PATH=./dataset/${DATASET}/${DATA_ALIAS}
+ROOT_PATH=./dataset/${DATASET}/${DATA_ALIAS}/
 
 # 1. Build the pre-training dataset.
 python 1.Build_pretraining_dataset.py --root_path $ROOT_PATH

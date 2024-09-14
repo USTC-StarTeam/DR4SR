@@ -1,5 +1,10 @@
 torch
 seq2pat
-numpy
+numpy==1.26.4
 scipy
 tqdm
+pyyaml
+wandb
+torchmetrics
+matplotlib
+faiss-gpu
