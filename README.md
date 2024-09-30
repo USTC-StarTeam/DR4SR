@@ -67,10 +67,12 @@ python 3.Hybrid_inference --root_path $ROOT_PATH
 
 
 # 7. (DR4SR) Train a target model on regenerated dataset
-python run.py -m SASRec -d amazon-toys-regen
+# (Note 1)Please set the `train_file` option to '_regen' in the corresponding config file `configs/amazon-toys.yaml`.
+# (Note 2) You can test the original dataset by setting `train_file` option to '_ori'
+python run.py -m SASRec -d amazon-toys
 
 # 8. (DR4SR+) Train a target model on regenerated and personalized dataset. We should first change 'sub_model' option to one of the target models in `configs/metamodel.yaml`
-python run.py -m MetaModel -d amazon-toys-regen
+python run.py -m MetaModel -d amazon-toys
 ```
 
 > Note: We use post padding ([1,2,3] -> [1,2,3,0,0]) for all target models except FMLP. And we use pre padding for FMLP ([1,2,3] -> [0,0,1,2,3]), which is consistent with the original implementation of FMLP. This is because we find the previous pre-processing will lead to terrible results of FMLP. This may be related to property of the FFT operation. Therefore, we should run `dataset/dataset_transform.ipynb` to transform all datasets for FMLP.
