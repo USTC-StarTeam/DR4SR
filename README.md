@@ -1,4 +1,4 @@
-# Dataset Regeneration for Sequential Recommendation
+# Dataset Regeneration for Sequential Recommendation (KDD'2024 Best Student Paper)
 
 ## Framework overview of DR4SR & DR4SR+
 
