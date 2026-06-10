@@ -201,6 +201,53 @@ python run.py -m MetaModel -d amazon-toys</code></pre>
 <h2 id="10-experimental-highlights">10. Experimental Highlights</h2>
 <p><img src="assets/idea.png" alt="DR4SR key idea"></p>
 <p>The paper shows that improving training data can complement model-centric improvements in sequential recommendation. DR4SR and DR4SR+ evaluate this idea across multiple datasets and target models.</p>
+<table>
+<thead><tr>
+<th>Dataset</th>
+<th style="text-align:right">Users</th>
+<th style="text-align:right">Items</th>
+<th style="text-align:right">Interactions</th>
+<th style="text-align:right">Avg. length</th>
+<th style="text-align:right">Sparsity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Beauty</td>
+<td style="text-align:right">22,363</td>
+<td style="text-align:right">12,101</td>
+<td style="text-align:right">0.32M</td>
+<td style="text-align:right">4.0</td>
+<td style="text-align:right">99.87%</td>
+</tr>
+<tr>
+<td>Sport</td>
+<td style="text-align:right">35,598</td>
+<td style="text-align:right">18,357</td>
+<td style="text-align:right">0.45M</td>
+<td style="text-align:right">4.2</td>
+<td style="text-align:right">99.93%</td>
+</tr>
+<tr>
+<td>Toys</td>
+<td style="text-align:right">19,412</td>
+<td style="text-align:right">11,924</td>
+<td style="text-align:right">0.30M</td>
+<td style="text-align:right">3.7</td>
+<td style="text-align:right">99.87%</td>
+</tr>
+<tr>
+<td>Yelp</td>
+<td style="text-align:right">30,431</td>
+<td style="text-align:right">20,033</td>
+<td style="text-align:right">0.52M</td>
+<td style="text-align:right">4.1</td>
+<td style="text-align:right">99.91%</td>
+</tr>
+</tbody>
+</table>
+<p>The overall-performance analysis reports that DR4SR improves target models across all datasets, and DR4SR+ adds model-aware personalization for further gains. The ablation study shows that using only frequent pattern data can reduce performance, while removing the model-aware personalizer causes a significant loss relative to DR4SR+.</p>
+<p><strong>Conclusion:</strong> the result story is data-centric: regenerated data improves sparse sequential recommendation, and target-model personalization matters when different architectures prefer different data.</p>
 <h2 id="11-notes-for-maintainers">11. Notes For Maintainers</h2>
 <ul>
 <li>Keep poster and slides available under <code>assets/</code> because they are linked from the paper section.</li>

@@ -127,6 +127,17 @@ FMLP uses pre-padding, while other target models use post-padding. Run `dataset/
 
 The paper shows that improving training data can complement model-centric improvements in sequential recommendation. DR4SR and DR4SR+ evaluate this idea across multiple datasets and target models.
 
+| Dataset | Users | Items | Interactions | Avg. length | Sparsity |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Beauty | 22,363 | 12,101 | 0.32M | 4.0 | 99.87% |
+| Sport | 35,598 | 18,357 | 0.45M | 4.2 | 99.93% |
+| Toys | 19,412 | 11,924 | 0.30M | 3.7 | 99.87% |
+| Yelp | 30,431 | 20,033 | 0.52M | 4.1 | 99.91% |
+
+The overall-performance analysis reports that DR4SR improves target models across all datasets, and DR4SR+ adds model-aware personalization for further gains. The ablation study shows that using only frequent pattern data can reduce performance, while removing the model-aware personalizer causes a significant loss relative to DR4SR+.
+
+**Conclusion:** the result story is data-centric: regenerated data improves sparse sequential recommendation, and target-model personalization matters when different architectures prefer different data.
+
 ## 11. Notes For Maintainers
 
 - Keep poster and slides available under `assets/` because they are linked from the paper section.
