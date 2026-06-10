@@ -5,73 +5,211 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DR4SR</title>
   <style>
-    :root { --ink: #111827; --muted: #536173; --line: #d8e0ec; --accent: #b45309; --soft: #fff7ed; }
+    :root {
+      --ink: #172033;
+      --muted: #53657a;
+      --line: #d8e0ea;
+      --paper: #ffffff;
+      --soft: #f3f6fa;
+      --blue: #2454d6;
+      --green: #087443;
+      --gold: #9f6700;
+    }
     * { box-sizing: border-box; }
-    html, body { overflow-x: hidden; }
-    body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: var(--ink); background: #f8fafc; line-height: 1.62; }
-    main { max-width: 1120px; margin: 0 auto; padding: 48px 22px 72px; }
-    header { border-bottom: 1px solid var(--line); padding-bottom: 22px; }
-    .eyebrow { color: var(--accent); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: 13px; }
-    h1 { margin: 8px 0 12px; font-size: clamp(34px, 6vw, 64px); line-height: 1.02; letter-spacing: 0; }
-    h2 { margin-top: 42px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 27px; }
-    p, h1, h2, .paper, .button { overflow-wrap: anywhere; }
-    p { max-width: 920px; }
-    a { color: #92400e; }
-    .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
-    .button { display: inline-flex; align-items: center; min-height: 38px; padding: 8px 13px; border-radius: 8px; border: 1px solid #e3bf8f; background: white; color: #92400e; text-decoration: none; font-weight: 700; }
-    .paper { display: block; max-width: 100%; width: 100%; white-space: normal; word-break: break-word; font-size: 18px; background: var(--soft); border-left: 4px solid var(--accent); padding: 16px 18px; }
-    img { max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; background: white; }
-    pre { overflow-x: auto; background: #111827; color: #f8fafc; padding: 16px; border-radius: 8px; }
-    code { font-family: Consolas, Menlo, monospace; }
-    @media (max-width: 640px) {
-      main { padding: 34px 18px 56px; }
-      .links { display: grid; grid-template-columns: minmax(0, 1fr); }
-      .button { justify-content: center; min-width: 0; padding: 7px 8px; font-size: 15px; }
-      .paper { font-size: 14px; line-height: 1.55; padding: 14px 12px; }
+    html, body { margin: 0; overflow-x: hidden; }
+    body {
+      color: var(--ink);
+      background: linear-gradient(180deg, #ffffff 0, #f6f8fb 360px, #eef2f7 100%);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      line-height: 1.62;
+    }
+    a { color: var(--blue); font-weight: 700; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 18px; }
+    .site-header { background: #fff; border-bottom: 1px solid var(--line); }
+    nav { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 18px; font-size: 14px; }
+    nav .brand { color: var(--ink); font-weight: 900; }
+    nav .nav-links { display: flex; flex-wrap: wrap; gap: 14px; }
+    .hero { padding: 48px 0 34px; }
+    .eyebrow { margin: 0 0 10px; color: var(--green); font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
+    h1 { margin: 0; max-width: 980px; font-size: clamp(32px, 5vw, 56px); line-height: 1.06; letter-spacing: 0; overflow-wrap: anywhere; word-break: break-word; }
+    .subtitle { max-width: 860px; margin: 18px 0 0; color: var(--muted); font-size: 18px; }
+    .quick-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+    .button {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 38px; border: 1px solid #b9c5d8; border-radius: 6px;
+      padding: 0 13px; background: var(--paper); color: #263650; font-size: 14px;
+    }
+    main.wrap { padding: 34px 18px 64px; }
+    .toc {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      padding: 14px; margin: 0 0 26px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.78);
+    }
+    .toc a { font-size: 13px; padding: 6px 8px; border-radius: 6px; background: #eef3fb; color: #26405f; }
+    .content {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 32px;
+      box-shadow: 0 18px 44px rgba(15, 23, 42, .06);
+    }
+    h2 { margin: 42px 0 14px; padding-top: 4px; border-top: 1px solid var(--line); font-size: 30px; line-height: 1.22; letter-spacing: 0; }
+    h2:first-child { margin-top: 0; border-top: 0; }
+    h3 { margin: 28px 0 10px; font-size: 22px; line-height: 1.25; letter-spacing: 0; }
+    p, li, td, th, .nav-links a, .toc a, .button { overflow-wrap: anywhere; word-break: break-word; }
+    p { margin: 0 0 16px; }
+    ul, ol { padding-left: 24px; }
+    li { margin: 6px 0; }
+    img { max-width: 100%; height: auto; border-radius: 6px; }
+    p > img:only-child { display: block; margin: 18px auto; border: 1px solid var(--line); box-shadow: 0 12px 30px rgba(15, 23, 42, .08); }
+    pre { max-width: 100%; overflow-x: auto; white-space: pre; margin: 16px 0; padding: 16px; border-radius: 8px; background: #111827; color: #e5e7eb; line-height: 1.5; }
+    code { font-family: "Cascadia Mono", Consolas, monospace; font-size: .92em; }
+    :not(pre) > code { padding: .12em .35em; border-radius: 4px; background: #eef2f7; color: #17304f; }
+    table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 9px 10px; border: 1px solid var(--line); vertical-align: top; }
+    th { background: #f4f7fb; text-align: left; }
+    blockquote { margin: 18px 0; padding: 10px 16px; border-left: 4px solid var(--blue); background: #f4f7fb; color: #334155; }
+    footer { padding: 28px 0 44px; color: var(--muted); font-size: 14px; }
+    @media (max-width: 760px) {
+      .wrap { padding: 0 12px; }
+      nav { align-items: flex-start; flex-direction: column; padding: 14px 0; }
+      nav .nav-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+      nav .nav-links a { min-width: 0; padding: 6px 8px; border-radius: 6px; background: #eef3fb; font-size: 13px; line-height: 1.25; }
+      .hero { padding: 34px 0 26px; }
+      h1 { max-width: 100%; font-size: 30px; }
+      .subtitle { font-size: 16px; }
+      .quick-links { display: grid; grid-template-columns: minmax(0, 1fr); }
+      .button { min-width: 0; width: 100%; padding: 7px 8px; }
+      .content { padding: 22px 16px; }
+      main.wrap { padding: 28px 12px 56px; }
+      h2 { font-size: 25px; }
+      h3 { font-size: 20px; }
+      pre { white-space: pre-wrap; word-break: break-word; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <header>
-      <div class="eyebrow">KDD 2024 Best Student Paper · Sequential Recommendation</div>
-      <h1>DR4SR</h1>
-      <p>Dataset regeneration for data-centric sequential recommendation.</p>
-      <div class="links">
-        <a class="button" href="https://doi.org/10.1145/3637528.3671841">Paper</a>
-        <a class="button" href="https://arxiv.org/abs/2405.17795">arXiv</a>
-        <a class="button" href="https://github.com/USTC-StarTeam/DR4SR/blob/KDD/assets/KDD2024_poster.pdf">Poster</a>
-        <a class="button" href="https://github.com/USTC-StarTeam/DR4SR/blob/KDD/assets/presentation.pdf">Slides</a>
-        <a class="button" href="https://github.com/USTC-StarTeam/DR4SR">Code</a>
+  <header class="site-header">
+    <nav class="wrap">
+      <a class="brand" href="https://github.com/USTC-StarTeam/DR4SR">USTC-StarTeam/DR4SR</a>
+      <div class="nav-links"><a href="#1-paper">1. Paper</a><a href="#2-highlights">2. Highlights</a><a href="#3-method-at-a-glance">3. Method At A Glance</a><a href="#4-repository-structure">4. Repository Structure</a><a href="#5-installation">5. Installation</a><a href="#6-data">6. Data</a><a href="#7-quick-start">7. Quick Start</a><a href="#8-reproducing-results">8. Reproducing Results</a><a href="#9-configuration-notes">9. Configuration Notes</a><a href="#10-experimental-highlights">10. Experimental Highlights</a><a href="#11-notes-for-maintainers">11. Notes For Maintainers</a><a href="#12-citation">12. Citation</a><a href="#13-contact">13. Contact</a><a href="#14-acknowledgments">14. Acknowledgments</a></div>
+    </nav>
+    <section class="hero">
+      <div class="wrap">
+        <p class="eyebrow">Academic Project Page</p>
+        <h1>DR4SR</h1>
+        <p class="subtitle">DR4SR introduces a data-centric view for sequential recommendation: instead of only designing stronger models for fixed data, it regenerates training datasets to improve the quality of sequential signals. The paper received the KDD 2024 Best Student Paper award.</p>
+        <div class="quick-links"><a class="button" href="https://doi.org/10.1145/3637528.3671841">Paper</a><a class="button" href="https://arxiv.org/abs/2405.17795">arXiv</a><a class="button" href="https://arxiv.org/pdf/2405.17795">PDF</a><a class="button" href="https://ustc-starteam.github.io/DR4SR/">Project Page</a><a class="button" href="assets/KDD2024_poster.pdf">Poster</a><a class="button" href="assets/presentation.pdf">Slides</a><a class="button" href="#12-citation">Citation</a><a class="button" href="https://github.com/USTC-StarTeam/DR4SR">GitHub Repo</a></div>
       </div>
-    </header>
-
-    <section>
-      <h2>1. Paper</h2>
-      <p class="paper">Mingjia Yin, Hao Wang, Wei Guo, Yong Liu, Suojuan Zhang, Sirui Zhao, Defu Lian, and Enhong Chen. <strong>Dataset Regeneration for Sequential Recommendation</strong>. In <em>Proceedings of KDD 2024</em>, pages 3954-3965, 2024.</p>
-      <p>DR4SR regenerates training sequences to improve data quality for sequential recommendation and received the KDD 2024 Best Student Paper award.</p>
     </section>
-
-    <section>
-      <h2>2. Method At A Glance</h2>
-      <img src="assets/framework.png" alt="DR4SR framework">
-    </section>
-
-    <section>
-      <h2>3. Quick Start</h2>
-      <pre><code>DATASET=amazon-toys
+  </header>
+  <main class="wrap">
+    <div class="toc"><a href="#1-paper">1. Paper</a><a href="#2-highlights">2. Highlights</a><a href="#3-method-at-a-glance">3. Method At A Glance</a><a href="#4-repository-structure">4. Repository Structure</a><a href="#5-installation">5. Installation</a><a href="#6-data">6. Data</a><a href="#7-quick-start">7. Quick Start</a><a href="#8-reproducing-results">8. Reproducing Results</a><a href="#9-configuration-notes">9. Configuration Notes</a><a href="#10-experimental-highlights">10. Experimental Highlights</a><a href="#11-notes-for-maintainers">11. Notes For Maintainers</a><a href="#12-citation">12. Citation</a><a href="#13-contact">13. Contact</a><a href="#14-acknowledgments">14. Acknowledgments</a></div>
+    <article class="content">
+<p>Official implementation for <strong>Dataset Regeneration for Sequential Recommendation</strong>.</p>
+<p><a href="https://doi.org/10.1145/3637528.3671841"><img src="https://img.shields.io/badge/KDD-2024-blue" alt="KDD 2024"></a>
+<a href="https://arxiv.org/abs/2405.17795"><img src="https://img.shields.io/badge/arXiv-2405.17795-b31b1b.svg" alt="arXiv"></a>
+<a href="https://kdd2024.kdd.org/"><img src="https://img.shields.io/badge/KDD%202024-Best%20Student%20Paper-gold" alt="Best Student Paper"></a>
+<a href="https://ustc-starteam.github.io/DR4SR/"><img src="https://img.shields.io/badge/Project-Page-blue" alt="Project Page"></a></p>
+<h2 id="1-paper">1. Paper</h2>
+<p>Mingjia Yin, Hao Wang, Wei Guo, Yong Liu, Suojuan Zhang, Sirui Zhao, Defu Lian, and Enhong Chen. <strong>Dataset Regeneration for Sequential Recommendation</strong>. In <em>Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD 2024)</em>, pages 3954-3965, Barcelona, Spain, 2024.</p>
+<p><a href="https://doi.org/10.1145/3637528.3671841">Paper</a> / <a href="https://arxiv.org/abs/2405.17795">arXiv</a> / <a href="https://arxiv.org/pdf/2405.17795">PDF</a> / <a href="https://ustc-starteam.github.io/DR4SR/">Project Page</a> / <a href="assets/KDD2024_poster.pdf">Poster</a> / <a href="assets/presentation.pdf">Slides</a> / <a href="#12-citation">Citation</a></p>
+<p>DR4SR introduces a data-centric view for sequential recommendation: instead of only designing stronger models for fixed data, it regenerates training datasets to improve the quality of sequential signals. The paper received the KDD 2024 Best Student Paper award.</p>
+<h2 id="2-highlights">2. Highlights</h2>
+<ul>
+<li>Proposes dataset regeneration for sequential recommendation.</li>
+<li>Supports both DR4SR and DR4SR+ training flows.</li>
+<li>Provides preprocessed datasets under <code>dataset/</code>.</li>
+<li>Includes the KDD 2024 poster and presentation slides.</li>
+<li>Builds on RecStudio, Seq2Pat, and AuxiLearn components.</li>
+</ul>
+<h2 id="3-method-at-a-glance">3. Method At A Glance</h2>
+<p><img src="assets/framework.png" alt="DR4SR framework"></p>
+<p>DR4SR builds a pre-training dataset, learns item embeddings, pre-trains a data regenerator, obtains regenerated sequences through hybrid inference, and trains downstream sequential recommendation models on regenerated data.</p>
+<h2 id="4-repository-structure">4. Repository Structure</h2>
+<pre><code class="language-text">.
+├── 1.Build_pretraining_dataset.py
+├── 2.Pretrain_regenerator.py
+├── 3.Hybrid_inference.py
+├── run.py
+├── configs/                 # Model and dataset configs
+├── dataset/                 # Preprocessed datasets and preprocessing notebooks
+├── model/                   # Sequential recommendation models
+├── assets/                  # Framework, poster, and slides
+└── docs/                    # GitHub Pages project page</code></pre>
+<h2 id="5-installation">5. Installation</h2>
+<p>The paper used:</p>
+<pre><code class="language-text">python == 3.9.19
+torch == 1.13.1+cu117
+seq2pat == 1.4.0
+numpy == 1.26.4
+scipy == 1.12.0</code></pre>
+<p>Install with:</p>
+<pre><code class="language-bash">conda create -n DR4SR python=3.9
+conda activate DR4SR
+pip install -r requirements.txt</code></pre>
+<h2 id="6-data">6. Data</h2>
+<p>Preprocessed datasets are uploaded under <code>dataset/</code>. To reproduce preprocessing:</p>
+<ol>
+<li>Download <a href="http://snap.stanford.edu/data/amazon/productGraph/categoryFiles/">Amazon</a> and <a href="https://github.com/salesforce/ICLRec">Yelp</a> datasets and place them under <code>dataset/</code>.</li>
+<li>Run the preprocessing notebooks:<ul>
+<li>Amazon: <code>dataset/preprocess_amazon.ipynb</code></li>
+<li>Yelp: <code>dataset/preprocess_yelp.ipynb</code></li>
+</ul>
+</li>
+</ol>
+<h2 id="7-quick-start">7. Quick Start</h2>
+<p>Model-agnostic dataset regeneration:</p>
+<pre><code class="language-bash"># 0. Select a target dataset, e.g., Amazon-toys.
+DATASET=amazon-toys
 DATA_ALIAS=toy
 ROOT_PATH=./dataset/${DATASET}/${DATA_ALIAS}/
-python 1.Build_pretraining_dataset.py --root_path $ROOT_PATH
-python run.py --model SASRec --dataset $DATASET
-python 2.Pretrain_regenerator.py --root_path $ROOT_PATH --K 5
-python 3.Hybrid_inference.py --root_path $ROOT_PATH
-python run.py -m SASRec -d amazon-toys</code></pre>
-    </section>
 
-    <section>
-      <h2>4. Citation</h2>
-      <pre><code>@inproceedings{yin2024dataset,
+# 1. Build the pre-training dataset.
+python 1.Build_pretraining_dataset.py --root_path $ROOT_PATH
+
+# 2. Generate pre-trained item embeddings.
+python run.py --model SASRec --dataset $DATASET
+
+# 3. Move the corresponding checkpoint to the dataset folder.
+mv CKPT_FILE_PATH ${ROOT_PATH}/pre-trained_embedding.ckpt
+
+# 4. Pre-train the data regenerator.
+python 2.Pretrain_regenerator.py --root_path $ROOT_PATH --K 5
+
+# 5. Obtain regenerated dataset with hybrid inference.
+python 3.Hybrid_inference.py --root_path $ROOT_PATH
+
+# 6. Optional: transform datasets for FMLP with dataset/dataset_transform.ipynb.
+
+# 7. DR4SR: train a target model on regenerated data.
+# Set train_file to &#x27;_regen&#x27; in configs/amazon-toys.yaml.
+python run.py -m SASRec -d amazon-toys
+
+# 8. DR4SR+: train a target model on regenerated and personalized data.
+# Set sub_model in configs/metamodel.yaml.
+python run.py -m MetaModel -d amazon-toys</code></pre>
+<h2 id="8-reproducing-results">8. Reproducing Results</h2>
+<p>For original datasets, set <code>train_file</code> to <code>_ori</code>. For regenerated datasets, set <code>train_file</code> to <code>_regen</code> in the corresponding dataset config.</p>
+<p>FMLP uses pre-padding, while other target models use post-padding. Run <code>dataset/dataset_transform.ipynb</code> before using FMLP, which follows the original FMLP implementation convention.</p>
+<h2 id="9-configuration-notes">9. Configuration Notes</h2>
+<ul>
+<li>Dataset configs: <code>configs/amazon-toys.yaml</code>, <code>configs/amazon-sport.yaml</code>, <code>configs/amazon-beauty.yaml</code>, and <code>configs/yelp.yaml</code>.</li>
+<li>Target model configs: <code>configs/sasrec.yaml</code>, <code>configs/gru4rec.yaml</code>, <code>configs/fmlp.yaml</code>, <code>configs/gnn.yaml</code>, and <code>configs/metamodel.yaml</code>.</li>
+<li>Regenerator checkpoint expected path: <code>${ROOT_PATH}/pre-trained_embedding.ckpt</code>.</li>
+</ul>
+<h2 id="10-experimental-highlights">10. Experimental Highlights</h2>
+<p><img src="assets/idea.png" alt="DR4SR key idea"></p>
+<p>The paper shows that improving training data can complement model-centric improvements in sequential recommendation. DR4SR and DR4SR+ evaluate this idea across multiple datasets and target models.</p>
+<h2 id="11-notes-for-maintainers">11. Notes For Maintainers</h2>
+<ul>
+<li>Keep poster and slides available under <code>assets/</code> because they are linked from the paper section.</li>
+<li>Preserve the numbered scripts; the README quick start follows their execution order.</li>
+<li>If a multiprocessing version of hybrid inference is added, document it next to step 5.</li>
+</ul>
+<h2 id="12-citation">12. Citation</h2>
+<p>If you find DR4SR useful, please cite:</p>
+<pre><code class="language-bibtex">@inproceedings{yin2024dataset,
   title={Dataset Regeneration for Sequential Recommendation},
   author={Yin, Mingjia and Wang, Hao and Guo, Wei and Liu, Yong and Zhang, Suojuan and Zhao, Sirui and Lian, Defu and Chen, Enhong},
   booktitle={Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining},
@@ -79,12 +217,18 @@ python run.py -m SASRec -d amazon-toys</code></pre>
   year={2024},
   doi={10.1145/3637528.3671841}
 }</code></pre>
-    </section>
+<h2 id="13-contact">13. Contact</h2>
+<ul>
+<li>First author: Mingjia Yin.</li>
+<li>Repository questions: please open a GitHub issue in this repository.</li>
+</ul>
+<h2 id="14-acknowledgments">14. Acknowledgments</h2>
+<p>This project is primarily built upon <a href="https://github.com/ustcml/RecStudio">RecStudio</a>. The pre-training dataset construction relies on <a href="https://github.com/fidelity/seq2pat">Seq2Pat</a>. The implicit gradient optimization framework is modified from <a href="https://github.com/AvivNavon/AuxiLearn">AuxiLearn</a>. We thank the developers of these repositories for their contributions.</p>
 
-    <section>
-      <h2>5. Key Idea</h2>
-      <img src="assets/idea.png" alt="DR4SR key idea">
-    </section>
+    </article>
   </main>
+  <footer>
+    <div class="wrap">This project page mirrors the public-facing README content for quick paper, code, result, citation, and contact access.</div>
+  </footer>
 </body>
 </html>
