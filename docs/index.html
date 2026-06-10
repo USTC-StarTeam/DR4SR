@@ -27,9 +27,6 @@
     a:hover { text-decoration: underline; }
     .wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 18px; }
     .site-header { background: #fff; border-bottom: 1px solid var(--line); }
-    nav { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 18px; font-size: 14px; }
-    nav .brand { color: var(--ink); font-weight: 900; }
-    nav .nav-links { display: flex; flex-wrap: wrap; gap: 14px; }
     .hero { padding: 48px 0 34px; }
     .eyebrow { margin: 0 0 10px; color: var(--green); font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; }
     h1 { margin: 0; max-width: 980px; font-size: clamp(32px, 5vw, 56px); line-height: 1.06; letter-spacing: 0; overflow-wrap: anywhere; word-break: break-word; }
@@ -56,7 +53,7 @@
     h2 { margin: 42px 0 14px; padding-top: 4px; border-top: 1px solid var(--line); font-size: 30px; line-height: 1.22; letter-spacing: 0; }
     h2:first-child { margin-top: 0; border-top: 0; }
     h3 { margin: 28px 0 10px; font-size: 22px; line-height: 1.25; letter-spacing: 0; }
-    p, li, td, th, .nav-links a, .toc a, .button { overflow-wrap: anywhere; word-break: break-word; }
+    p, li, td, th, .toc a, .button { overflow-wrap: anywhere; word-break: break-word; }
     p { margin: 0 0 16px; }
     ul, ol { padding-left: 24px; }
     li { margin: 6px 0; }
@@ -72,9 +69,6 @@
     footer { padding: 28px 0 44px; color: var(--muted); font-size: 14px; }
     @media (max-width: 760px) {
       .wrap { padding: 0 12px; }
-      nav { align-items: flex-start; flex-direction: column; padding: 14px 0; }
-      nav .nav-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
-      nav .nav-links a { min-width: 0; padding: 6px 8px; border-radius: 6px; background: #eef3fb; font-size: 13px; line-height: 1.25; }
       .hero { padding: 34px 0 26px; }
       h1 { max-width: 100%; font-size: 30px; }
       .subtitle { font-size: 16px; }
@@ -90,10 +84,6 @@
 </head>
 <body>
   <header class="site-header">
-    <nav class="wrap">
-      <a class="brand" href="https://github.com/USTC-StarTeam/DR4SR">USTC-StarTeam/DR4SR</a>
-      <div class="nav-links"><a href="#1-paper">1. Paper</a><a href="#2-highlights">2. Highlights</a><a href="#3-method-at-a-glance">3. Method At A Glance</a><a href="#4-repository-structure">4. Repository Structure</a><a href="#5-installation">5. Installation</a><a href="#6-data">6. Data</a><a href="#7-quick-start">7. Quick Start</a><a href="#8-reproducing-results">8. Reproducing Results</a><a href="#9-configuration-notes">9. Configuration Notes</a><a href="#10-experimental-highlights">10. Experimental Highlights</a><a href="#11-notes-for-maintainers">11. Notes For Maintainers</a><a href="#12-citation">12. Citation</a><a href="#13-contact">13. Contact</a><a href="#14-acknowledgments">14. Acknowledgments</a></div>
-    </nav>
     <section class="hero">
       <div class="wrap">
         <p class="eyebrow">Academic Project Page</p>
