@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DR4SR</title>
+  <style>
+    :root { --ink: #111827; --muted: #536173; --line: #d8e0ec; --accent: #b45309; --soft: #fff7ed; }
+    * { box-sizing: border-box; }
+    html, body { overflow-x: hidden; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: var(--ink); background: #f8fafc; line-height: 1.62; }
+    main { max-width: 1120px; margin: 0 auto; padding: 48px 22px 72px; }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 22px; }
+    .eyebrow { color: var(--accent); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: 13px; }
+    h1 { margin: 8px 0 12px; font-size: clamp(34px, 6vw, 64px); line-height: 1.02; letter-spacing: 0; }
+    h2 { margin-top: 42px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 27px; }
+    p, h1, h2, .paper, .button { overflow-wrap: anywhere; }
+    p { max-width: 920px; }
+    a { color: #92400e; }
+    .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+    .button { display: inline-flex; align-items: center; min-height: 38px; padding: 8px 13px; border-radius: 8px; border: 1px solid #e3bf8f; background: white; color: #92400e; text-decoration: none; font-weight: 700; }
+    .paper { display: block; max-width: 100%; width: 100%; white-space: normal; word-break: break-word; font-size: 18px; background: var(--soft); border-left: 4px solid var(--accent); padding: 16px 18px; }
+    img { max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; background: white; }
+    pre { overflow-x: auto; background: #111827; color: #f8fafc; padding: 16px; border-radius: 8px; }
+    code { font-family: Consolas, Menlo, monospace; }
+    @media (max-width: 640px) {
+      main { padding: 34px 18px 56px; }
+      .links { display: grid; grid-template-columns: minmax(0, 1fr); }
+      .button { justify-content: center; min-width: 0; padding: 7px 8px; font-size: 15px; }
+      .paper { font-size: 14px; line-height: 1.55; padding: 14px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">KDD 2024 Best Student Paper · Sequential Recommendation</div>
+      <h1>DR4SR</h1>
+      <p>Dataset regeneration for data-centric sequential recommendation.</p>
+      <div class="links">
+        <a class="button" href="https://doi.org/10.1145/3637528.3671841">Paper</a>
+        <a class="button" href="https://arxiv.org/abs/2405.17795">arXiv</a>
+        <a class="button" href="https://github.com/USTC-StarTeam/DR4SR/blob/KDD/assets/KDD2024_poster.pdf">Poster</a>
+        <a class="button" href="https://github.com/USTC-StarTeam/DR4SR/blob/KDD/assets/presentation.pdf">Slides</a>
+        <a class="button" href="https://github.com/USTC-StarTeam/DR4SR">Code</a>
+      </div>
+    </header>
+
+    <section>
+      <h2>1. Paper</h2>
+      <p class="paper">Mingjia Yin, Hao Wang, Wei Guo, Yong Liu, Suojuan Zhang, Sirui Zhao, Defu Lian, and Enhong Chen. <strong>Dataset Regeneration for Sequential Recommendation</strong>. In <em>Proceedings of KDD 2024</em>, pages 3954-3965, 2024.</p>
+      <p>DR4SR regenerates training sequences to improve data quality for sequential recommendation and received the KDD 2024 Best Student Paper award.</p>
+    </section>
+
+    <section>
+      <h2>2. Method At A Glance</h2>
+      <img src="assets/framework.png" alt="DR4SR framework">
+    </section>
+
+    <section>
+      <h2>3. Quick Start</h2>
+      <pre><code>DATASET=amazon-toys
+DATA_ALIAS=toy
+ROOT_PATH=./dataset/${DATASET}/${DATA_ALIAS}/
+python 1.Build_pretraining_dataset.py --root_path $ROOT_PATH
+python run.py --model SASRec --dataset $DATASET
+python 2.Pretrain_regenerator.py --root_path $ROOT_PATH --K 5
+python 3.Hybrid_inference.py --root_path $ROOT_PATH
+python run.py -m SASRec -d amazon-toys</code></pre>
+    </section>
+
+    <section>
+      <h2>4. Citation</h2>
+      <pre><code>@inproceedings{yin2024dataset,
+  title={Dataset Regeneration for Sequential Recommendation},
+  author={Yin, Mingjia and Wang, Hao and Guo, Wei and Liu, Yong and Zhang, Suojuan and Zhao, Sirui and Lian, Defu and Chen, Enhong},
+  booktitle={Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining},
+  pages={3954--3965},
+  year={2024},
+  doi={10.1145/3637528.3671841}
+}</code></pre>
+    </section>
+
+    <section>
+      <h2>5. Key Idea</h2>
+      <img src="assets/idea.png" alt="DR4SR key idea">
+    </section>
+  </main>
+</body>
+</html>
