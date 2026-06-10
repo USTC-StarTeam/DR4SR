@@ -123,6 +123,11 @@ FMLP uses pre-padding, while other target models use post-padding. Run `dataset/
 
 ## 10. Experimental Highlights
 
+![DR4SR overall, ablation, and efficiency results](docs/assets/dr4sr-experimental-results.png)
+
+This experiment-page crop shows the full overall comparison, model-aware personalization analysis, ablation, time/space efficiency, and generated-data form analysis behind the README takeaway.
+
+
 ![DR4SR key idea](docs/assets/idea.png)
 
 The paper shows that improving training data can complement model-centric improvements in sequential recommendation. DR4SR and DR4SR+ evaluate this idea across multiple datasets and target models.
@@ -161,7 +166,8 @@ If you find DR4SR useful, please cite:
 
 ## 13. Contact
 
-- First author: Mingjia Yin.
+- First author: Mingjia Yin (`mingjia-yin@mail.ustc.edu.cn`).
+- Corresponding author: Hao Wang (`wanghao3@ustc.edu.cn`).
 - Repository questions: please open a GitHub issue in this repository.
 
 ## 14. Acknowledgments
