@@ -33,7 +33,7 @@ if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
 
     # # Dataset
-    dataset_name = args.root_path.split('/')[-1] # e.g., 'toy' in './dataset/amazon-toys/toy/'
+    dataset_name = os.path.basename(os.path.normpath(args.root_path))
     num_item_dict = {
         'toy': 11925,
         'sport': 18358,
